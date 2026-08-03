@@ -27,6 +27,7 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 branch = true
+data_file = ".coverage.current"
 source = ["sparseflow"]
 
 [tool.coverage.report]

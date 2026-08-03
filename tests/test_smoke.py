@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,9 @@ from sparseflow.report import build_evidence_report, validate_evidence_report
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+SUBPROCESS_ENV = {
+    key: value for key, value in os.environ.items() if not key.startswith("COV_CORE_")
+}
 
 
 def _committed_audit(seed=1234):
@@ -49,6 +53,7 @@ def test_cli_success_and_validation_failure(tmp_path):
         capture_output=True,
         text=True,
         check=False,
+        env=SUBPROCESS_ENV,
     )
     assert success.returncode == 0, success.stderr
     assert json.loads(success_report.read_text(encoding="utf-8"))["optimization"]["pass_name"] == "noop"
@@ -60,6 +65,7 @@ def test_cli_success_and_validation_failure(tmp_path):
         capture_output=True,
         text=True,
         check=False,
+        env=SUBPROCESS_ENV,
     )
     assert failure.returncode != 0
     assert "commit_hash" in failure.stderr
