@@ -8,7 +8,13 @@ from sparseflow.report import EvidenceValidationError, validate_evidence_report,
 
 def _valid_report():
     return {
-        "schema_version": "0.2.0",
+        "schema_version": "0.3.0",
+        "product": {
+            "current_milestone": "SparseFlow V0",
+            "positioning": "SparseFlow V0: reproducible optimization and evidence harness, validated with a deterministic physical channel-pruning demonstration.",
+            "demonstration_type": "physical_channel_pruning_mechanism_demonstration",
+            "commercial_benchmark": False,
+        },
         "run": {
             "id": "run-abc123",
             "timestamp_utc": "2026-08-03T20:00:00Z",
@@ -29,6 +35,19 @@ def _valid_report():
             "process": {"onnxruntime_intra_op_threads": 1, "onnxruntime_inter_op_threads": 1},
         },
         "model": {"identifier": "reference_cnn_v1", "fidelity_is_proxy": True},
+        "configuration": {
+            "preset": "noop-control",
+            "model_identifier": "reference_cnn_v1",
+            "seed": 1234,
+            "input_shape": [1, 3, 16, 16],
+            "pass_name": "noop",
+            "pruning_ratio": 0.0,
+            "warmup_runs": 1,
+            "measured_runs": 2,
+            "intra_op_threads": 1,
+            "inter_op_threads": 1,
+            "output_report_filename": "report-noop.json",
+        },
         "optimization": {"pass_name": "noop", "config": {}, "metadata": {}},
         "metrics": {
             "parameters": {"baseline": 10, "optimized": 10, "reduction_percent": 0.0},
@@ -37,9 +56,9 @@ def _valid_report():
                 "onnx": {"baseline": 100, "optimized": 100, "reduction_percent": 0.0},
             },
             "latency_ms": {
-                "methodology": {"provider": "CPUExecutionProvider", "warmup_runs": 1, "measured_runs": 2, "threads": 1, "clock": "time.perf_counter_ns"},
-                "baseline": {"samples": [1.0, 1.1], "samples_sha256": "b" * 64, "p50": 1.05, "p95": 1.095},
-                "optimized": {"samples": [1.0, 1.1], "samples_sha256": "b" * 64, "p50": 1.05, "p95": 1.095},
+                "methodology": {"provider": "CPUExecutionProvider", "warmup_runs": 1, "measured_runs": 2, "intra_op_threads": 1, "inter_op_threads": 1, "clock": "time.perf_counter_ns"},
+                "baseline": {"samples": [1.0, 1.1], "samples_sha256": "b" * 64, "p50": 1.05, "p95": 1.095, "minimum": 1.0, "maximum": 1.1, "mean": 1.05, "standard_deviation": 0.05, "coefficient_of_variation": 0.047619},
+                "optimized": {"samples": [1.0, 1.1], "samples_sha256": "b" * 64, "p50": 1.05, "p95": 1.095, "minimum": 1.0, "maximum": 1.1, "mean": 1.05, "standard_deviation": 0.05, "coefficient_of_variation": 0.047619},
             },
             "compute": {
                 "convention": "1 MAC = 2 FLOPs",
@@ -51,6 +70,11 @@ def _valid_report():
                 "flop_reduction_percent": 0.0,
             },
             "fidelity": {"label": "proxy", "method": "output comparison", "absolute_error_max": 0.0, "relative_l2_error": 0.0, "tolerance": {"absolute_max": 1e-6, "relative_l2_max": 1e-5}, "passed": True},
+        },
+        "latency_interpretation": {
+            "noise_sensitive": False,
+            "reasons": [],
+            "commercial_speedup_claim_supported": False,
         },
         "graph": {
             "changes": [],
@@ -100,4 +124,27 @@ def test_report_is_schema_valid_and_deterministically_written(tmp_path):
 
     assert first.read_bytes() == second.read_bytes()
     assert first.read_text(encoding="utf-8").endswith("\n")
-    assert list(report) == ["schema_version", "run", "environment", "model", "optimization", "metrics", "graph", "artifacts"]
+    assert list(report) == ["schema_version", "product", "run", "environment", "model", "configuration", "optimization", "metrics", "latency_interpretation", "graph", "artifacts"]
+
+
+def test_old_schema_report_fails_clearly():
+    report = _valid_report()
+    report["schema_version"] = "0.2.0"
+
+    with pytest.raises(EvidenceValidationError, match="schema_version"):
+        validate_evidence_report(report)
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["channel-prune-report.json", "noop-report.json"],
+)
+def test_curated_reference_reports_validate(filename):
+    import json
+
+    path = Path(__file__).resolve().parents[1] / "examples" / "reference-run" / filename
+    report = json.loads(path.read_text(encoding="utf-8"))
+
+    validate_evidence_report(report)
+    assert report["schema_version"] == "0.3.0"
+    assert report["product"]["commercial_benchmark"] is False

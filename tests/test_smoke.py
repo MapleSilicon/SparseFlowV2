@@ -56,7 +56,12 @@ def test_cli_success_and_validation_failure(tmp_path):
         env=SUBPROCESS_ENV,
     )
     assert success.returncode == 0, success.stderr
-    assert json.loads(success_report.read_text(encoding="utf-8"))["optimization"]["pass_name"] == "noop"
+    success_data = json.loads(success_report.read_text(encoding="utf-8"))
+    assert success_data["optimization"]["pass_name"] == "noop"
+    assert success_data["configuration"]["preset"] == "micro-demo"
+    assert success_data["configuration"]["pass_name"] == "noop"
+    assert success_data["configuration"]["measured_runs"] == 1
+    assert success_data["latency_interpretation"]["commercial_speedup_claim_supported"] is False
 
     failed_report = tmp_path / "failed.json"
     failure = subprocess.run(

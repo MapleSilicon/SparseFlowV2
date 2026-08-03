@@ -12,7 +12,16 @@ from sparseflow.benchmark import BenchmarkResult
 from sparseflow.serialization import atomic_write_json, sha256_json, stable_json_dumps
 
 
-SCHEMA_VERSION = "0.2.0"
+SCHEMA_VERSION = "0.3.0"
+V0_POSITIONING = (
+    "SparseFlow V0: reproducible optimization and evidence harness, validated "
+    "with a deterministic physical channel-pruning demonstration."
+)
+V1_MILESTONE = (
+    "SparseFlow V1: ResNet-18 dependency-aware physical channel pruning, ONNX "
+    "Runtime CPU deployment, and measured accuracy/latency evidence on a real "
+    "evaluation workload."
+)
 DEFAULT_SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "evidence-report.schema.json"
 
 
@@ -76,6 +85,7 @@ def build_evidence_report(
         "seed": config["seed"],
         "input_shape": config["input_shape"],
         "optimization": result.optimization,
+        "configuration": result.resolved_configuration,
     }
     run_identifier = f"run-{sha256_json(deterministic_run_inputs)[:16]}"
     timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
@@ -88,6 +98,13 @@ def build_evidence_report(
     optimized_compute = optimized["compute"]
     report = {
         "schema_version": SCHEMA_VERSION,
+        "product": {
+            "current_milestone": "SparseFlow V0",
+            "positioning": V0_POSITIONING,
+            "demonstration_type": "physical_channel_pruning_mechanism_demonstration",
+            "commercial_benchmark": False,
+            "next_milestone": V1_MILESTONE,
+        },
         "run": {
             "id": run_identifier,
             "timestamp_utc": timestamp,
@@ -105,6 +122,7 @@ def build_evidence_report(
             "identifier": result.model_identifier,
             "fidelity_is_proxy": True,
         },
+        "configuration": result.resolved_configuration,
         "optimization": result.optimization,
         "metrics": {
             "parameters": {
@@ -164,6 +182,7 @@ def build_evidence_report(
             },
             "fidelity": result.fidelity,
         },
+        "latency_interpretation": result.latency_interpretation,
         "graph": result.graph,
         "artifacts": result.artifacts,
     }
@@ -195,7 +214,7 @@ def render_result_table(report: dict[str, Any]) -> str:
         ("Latency p95 ms", latency["baseline"]["p95"], latency["optimized"]["p95"], _reduction_percent(latency["baseline"]["p95"], latency["optimized"]["p95"])),
     ]
     lines = [
-        "SparseFlow V0/V1 CPU Evidence Benchmark",
+        "SparseFlow V0 Evidence Benchmark",
         f"Pass: {report['optimization']['pass_name']}",
         "-" * 72,
         f"{'Metric':<22}{'Baseline':>16}{'Optimized':>16}{'Reduction':>14}",
@@ -216,6 +235,8 @@ def render_result_table(report: dict[str, Any]) -> str:
             "-" * 72,
             f"Fidelity proxy passed: {metrics['fidelity']['passed']}",
             "Fidelity is an untrained-model output proxy, not task accuracy.",
+            f"Latency noise-sensitive: {report['latency_interpretation']['noise_sensitive']}",
+            "Commercial speedup claim supported: False",
         ]
     )
     return "\n".join(lines)

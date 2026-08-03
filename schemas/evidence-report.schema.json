@@ -1,12 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://maplesilicon.co/schemas/sparseflow/evidence-report-0.2.0.json",
-  "title": "SparseFlow evidence report",
+  "$id": "https://maplesilicon.co/schemas/sparseflow/evidence-report-0.3.0.json",
+  "title": "SparseFlow V0 evidence report",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "run", "environment", "model", "optimization", "metrics", "graph", "artifacts"],
+  "required": ["schema_version", "product", "run", "environment", "model", "configuration", "optimization", "metrics", "latency_interpretation", "graph", "artifacts"],
   "properties": {
-    "schema_version": {"const": "0.2.0"},
+    "schema_version": {"const": "0.3.0"},
+    "product": {
+      "type": "object",
+      "required": ["current_milestone", "positioning", "demonstration_type", "commercial_benchmark"],
+      "properties": {
+        "current_milestone": {"const": "SparseFlow V0"},
+        "positioning": {"const": "SparseFlow V0: reproducible optimization and evidence harness, validated with a deterministic physical channel-pruning demonstration."},
+        "demonstration_type": {"const": "physical_channel_pruning_mechanism_demonstration"},
+        "commercial_benchmark": {"const": false},
+        "next_milestone": {"type": "string", "minLength": 1}
+      }
+    },
     "run": {
       "type": "object",
       "required": ["id", "timestamp_utc", "seed", "input_shape", "repository", "git"],
@@ -52,6 +63,23 @@
       "required": ["identifier", "fidelity_is_proxy"],
       "properties": {"identifier": {"type": "string", "minLength": 1}, "fidelity_is_proxy": {"const": true}}
     },
+    "configuration": {
+      "type": "object",
+      "required": ["preset", "model_identifier", "seed", "input_shape", "pass_name", "pruning_ratio", "warmup_runs", "measured_runs", "intra_op_threads", "inter_op_threads", "output_report_filename"],
+      "properties": {
+        "preset": {"type": ["string", "null"]},
+        "model_identifier": {"type": "string", "minLength": 1},
+        "seed": {"type": "integer"},
+        "input_shape": {"$ref": "#/$defs/inputShape"},
+        "pass_name": {"enum": ["noop", "channel-prune"]},
+        "pruning_ratio": {"type": "number", "minimum": 0, "exclusiveMaximum": 1},
+        "warmup_runs": {"type": "integer", "minimum": 0},
+        "measured_runs": {"type": "integer", "minimum": 1},
+        "intra_op_threads": {"type": "integer", "minimum": 1},
+        "inter_op_threads": {"type": "integer", "minimum": 1},
+        "output_report_filename": {"type": "string", "minLength": 1}
+      }
+    },
     "optimization": {
       "type": "object",
       "required": ["pass_name", "config", "metadata"],
@@ -73,12 +101,13 @@
           "properties": {
             "methodology": {
               "type": "object",
-              "required": ["provider", "warmup_runs", "measured_runs", "threads", "clock"],
+              "required": ["provider", "warmup_runs", "measured_runs", "intra_op_threads", "inter_op_threads", "clock"],
               "properties": {
                 "provider": {"const": "CPUExecutionProvider"},
                 "warmup_runs": {"type": "integer", "minimum": 0},
                 "measured_runs": {"type": "integer", "minimum": 1},
-                "threads": {"type": "integer", "minimum": 1},
+                "intra_op_threads": {"type": "integer", "minimum": 1},
+                "inter_op_threads": {"type": "integer", "minimum": 1},
                 "clock": {"type": "string", "minLength": 1}
               }
             },
@@ -113,6 +142,16 @@
         }
       }
     },
+    "latency_interpretation": {
+      "type": "object",
+      "required": ["noise_sensitive", "reasons", "commercial_speedup_claim_supported"],
+      "properties": {
+        "noise_sensitive": {"type": "boolean"},
+        "reasons": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "commercial_speedup_claim_supported": {"const": false},
+        "policy": {"type": "string", "minLength": 1}
+      }
+    },
     "graph": {
       "type": "object",
       "required": ["changes", "graph_diff_hash", "baseline_structural_hash", "optimized_structural_hash"],
@@ -141,12 +180,17 @@
     },
     "latency": {
       "type": "object",
-      "required": ["samples", "samples_sha256", "p50", "p95"],
+      "required": ["samples", "samples_sha256", "p50", "p95", "minimum", "maximum", "mean", "standard_deviation", "coefficient_of_variation"],
       "properties": {
         "samples": {"type": "array", "minItems": 1, "items": {"type": "number", "minimum": 0}},
         "samples_sha256": {"$ref": "#/$defs/hash"},
         "p50": {"type": "number", "minimum": 0},
-        "p95": {"type": "number", "minimum": 0}
+        "p95": {"type": "number", "minimum": 0},
+        "minimum": {"type": "number", "minimum": 0},
+        "maximum": {"type": "number", "minimum": 0},
+        "mean": {"type": "number", "minimum": 0},
+        "standard_deviation": {"type": "number", "minimum": 0},
+        "coefficient_of_variation": {"type": "number", "minimum": 0}
       }
     },
     "compute": {

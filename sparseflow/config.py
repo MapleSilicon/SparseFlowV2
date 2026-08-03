@@ -1,4 +1,4 @@
-"""Validated benchmark configuration."""
+"""Validated SparseFlow V0 benchmark configuration."""
 
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ class BenchmarkConfig:
     threads: int = 1
     onnx_opset: int = 17
     fidelity_batch_size: int = 8
+    preset_name: str | None = None
+    output_report_filename: str = "report.json"
 
     def __post_init__(self) -> None:
         if len(self.input_shape) != 4 or any(
@@ -33,6 +35,10 @@ class BenchmarkConfig:
             raise ValueError("onnx_opset must be at least 13")
         if self.fidelity_batch_size <= 0:
             raise ValueError("fidelity_batch_size must be positive")
+        if self.preset_name is not None and not self.preset_name:
+            raise ValueError("preset_name cannot be empty")
+        if not self.output_report_filename:
+            raise ValueError("output_report_filename cannot be empty")
 
     def as_dict(self) -> dict[str, Any]:
         values = asdict(self)

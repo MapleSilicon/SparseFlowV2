@@ -1,0 +1,729 @@
+{
+  "artifacts": {
+    "baseline": {
+      "model_hash": "e8ae51a407bb000a3c5ba0ff9b4552bd21096ed86dcaf16e0d4ce8ba619a2e22",
+      "onnx_opset": 17,
+      "onnx_sha256": "2c9c04cf24aace7bbb857cdc04874ea2a67ce205ba8323114b4cb3ddc4e40631",
+      "onnx_validated": true,
+      "pytorch_sha256": "ffcc05a0c032b76426bb5ccc7480a6413e7dd7fbfa922ac1099a7377df455eb2"
+    },
+    "optimized": {
+      "model_hash": "d303d7ff397baaa75804d97ea35a8d5a8a134164cac641db27c7907d0e58c930",
+      "onnx_opset": 17,
+      "onnx_sha256": "e546a7d941d2324d78b7844ba74faaeb2bb717635557c06d4298092065b4f15c",
+      "onnx_validated": true,
+      "pytorch_sha256": "175ecaf73a262c60db48b2f9c705c46dd95dde56e2c3ff46a6313e71a1f5ef4f"
+    }
+  },
+  "configuration": {
+    "input_shape": [
+      1,
+      3,
+      16,
+      16
+    ],
+    "inter_op_threads": 1,
+    "intra_op_threads": 1,
+    "measured_runs": 30,
+    "model_identifier": "reference_cnn_v1",
+    "output_report_filename": "report.json",
+    "pass_name": "channel-prune",
+    "preset": "micro-demo",
+    "pruning_ratio": 0.375,
+    "seed": 1234,
+    "warmup_runs": 5
+  },
+  "environment": {
+    "hardware": {
+      "architecture": "64bit",
+      "cpu_model": "Intel64 Family 6 Model 126 Stepping 5, GenuineIntel",
+      "logical_cpu_count": 8,
+      "machine": "AMD64",
+      "operating_system": "Windows",
+      "operating_system_release": "10"
+    },
+    "process": {
+      "mkl_num_threads": null,
+      "omp_num_threads": null,
+      "onnxruntime_execution_mode": "ORT_SEQUENTIAL",
+      "onnxruntime_inter_op_threads": 1,
+      "onnxruntime_intra_op_threads": 1,
+      "torch_num_interop_threads": 4,
+      "torch_num_threads": 4
+    },
+    "software": {
+      "numpy": "2.2.6",
+      "onnx": "1.20.1",
+      "onnxruntime": "1.23.2",
+      "python": "3.10.11",
+      "torch": "2.10.0+cpu"
+    }
+  },
+  "graph": {
+    "baseline_fx_graph": "graph():\n    %inputs : 'torch.Tensor' [num_users=1] = placeholder[target=inputs]\n    %features_0 : [num_users=1] = call_module[target=features.0](args = (%inputs,), kwargs = {})\n    %features_1 : [num_users=1] = call_module[target=features.1](args = (%features_0,), kwargs = {})\n    %features_2 : [num_users=1] = call_module[target=features.2](args = (%features_1,), kwargs = {})\n    %features_3 : [num_users=1] = call_module[target=features.3](args = (%features_2,), kwargs = {})\n    %features_4 : [num_users=1] = call_module[target=features.4](args = (%features_3,), kwargs = {})\n    %features_5 : [num_users=1] = call_module[target=features.5](args = (%features_4,), kwargs = {})\n    %features_6 : [num_users=1] = call_module[target=features.6](args = (%features_5,), kwargs = {})\n    %features_7 : [num_users=1] = call_module[target=features.7](args = (%features_6,), kwargs = {})\n    %features_8 : [num_users=1] = call_module[target=features.8](args = (%features_7,), kwargs = {})\n    %features_9 : [num_users=1] = call_module[target=features.9](args = (%features_8,), kwargs = {})\n    %features_10 : [num_users=1] = call_module[target=features.10](args = (%features_9,), kwargs = {})\n    %features_11 : [num_users=1] = call_module[target=features.11](args = (%features_10,), kwargs = {})\n    %flatten : [num_users=1] = call_function[target=torch.flatten](args = (%features_11, 1), kwargs = {})\n    %classifier : [num_users=1] = call_module[target=classifier](args = (%flatten,), kwargs = {})\n    return classifier",
+    "baseline_structural_hash": "23dbfec2ad7ca9d87c4dcd08dc748fbb5fd1a3eb4243f5ddd87d379271b051ad",
+    "changes": [
+      {
+        "after": {
+          "bias": true,
+          "bias_shape": [
+            5
+          ],
+          "dilation": [
+            1,
+            1
+          ],
+          "groups": 1,
+          "in_channels": 3,
+          "kernel_size": [
+            3,
+            3
+          ],
+          "out_channels": 5,
+          "padding": [
+            1,
+            1
+          ],
+          "stride": [
+            1,
+            1
+          ],
+          "weight_shape": [
+            5,
+            3,
+            3,
+            3
+          ]
+        },
+        "before": {
+          "bias": true,
+          "bias_shape": [
+            8
+          ],
+          "dilation": [
+            1,
+            1
+          ],
+          "groups": 1,
+          "in_channels": 3,
+          "kernel_size": [
+            3,
+            3
+          ],
+          "out_channels": 8,
+          "padding": [
+            1,
+            1
+          ],
+          "stride": [
+            1,
+            1
+          ],
+          "weight_shape": [
+            8,
+            3,
+            3,
+            3
+          ]
+        },
+        "change_type": "prune_output_channels",
+        "metadata": {
+          "dependency_relationship": "producer_to_batchnorm_and_next_conv",
+          "kept_output_channel_indices": [
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "ranking": "l1_weight_magnitude",
+          "reason": "remove lowest L1 weight-magnitude output channels",
+          "removed_output_channel_indices": [
+            0,
+            1,
+            2
+          ],
+          "removed_output_channels": 3
+        },
+        "node": "features.0",
+        "op_type": "Conv2d"
+      },
+      {
+        "after": {
+          "affine": true,
+          "num_features": 5,
+          "running_mean_shape": [
+            5
+          ],
+          "running_var_shape": [
+            5
+          ],
+          "track_running_stats": true,
+          "weight_shape": [
+            5
+          ]
+        },
+        "before": {
+          "affine": true,
+          "num_features": 8,
+          "running_mean_shape": [
+            8
+          ],
+          "running_var_shape": [
+            8
+          ],
+          "track_running_stats": true,
+          "weight_shape": [
+            8
+          ]
+        },
+        "change_type": "dependency_repair",
+        "metadata": {
+          "dependency_relationship": "conv_output_to_batchnorm_features",
+          "reason": "match BatchNorm features to retained Conv2d outputs",
+          "removed_feature_indices": [
+            0,
+            1,
+            2
+          ],
+          "source_node": "features.0"
+        },
+        "node": "features.1",
+        "op_type": "BatchNorm2d"
+      },
+      {
+        "after": {
+          "bias": true,
+          "bias_shape": [
+            10
+          ],
+          "dilation": [
+            1,
+            1
+          ],
+          "groups": 1,
+          "in_channels": 5,
+          "kernel_size": [
+            3,
+            3
+          ],
+          "out_channels": 10,
+          "padding": [
+            1,
+            1
+          ],
+          "stride": [
+            1,
+            1
+          ],
+          "weight_shape": [
+            10,
+            5,
+            3,
+            3
+          ]
+        },
+        "before": {
+          "bias": true,
+          "bias_shape": [
+            16
+          ],
+          "dilation": [
+            1,
+            1
+          ],
+          "groups": 1,
+          "in_channels": 8,
+          "kernel_size": [
+            3,
+            3
+          ],
+          "out_channels": 16,
+          "padding": [
+            1,
+            1
+          ],
+          "stride": [
+            1,
+            1
+          ],
+          "weight_shape": [
+            16,
+            8,
+            3,
+            3
+          ]
+        },
+        "change_type": "dependency_repair",
+        "metadata": {
+          "dependency_relationship": "previous_conv_output_to_conv_input",
+          "reason": "match consumer inputs to physically retained producer outputs",
+          "removed_input_channel_indices": [
+            0,
+            1,
+            2
+          ],
+          "removed_input_channels": 3,
+          "source_node": "features.0"
+        },
+        "node": "features.4",
+        "op_type": "Conv2d"
+      },
+      {
+        "after": {
+          "bias": true,
+          "bias_shape": [
+            10
+          ],
+          "dilation": [
+            1,
+            1
+          ],
+          "groups": 1,
+          "in_channels": 5,
+          "kernel_size": [
+            3,
+            3
+          ],
+          "out_channels": 10,
+          "padding": [
+            1,
+            1
+          ],
+          "stride": [
+            1,
+            1
+          ],
+          "weight_shape": [
+            10,
+            5,
+            3,
+            3
+          ]
+        },
+        "before": {
+          "bias": true,
+          "bias_shape": [
+            16
+          ],
+          "dilation": [
+            1,
+            1
+          ],
+          "groups": 1,
+          "in_channels": 8,
+          "kernel_size": [
+            3,
+            3
+          ],
+          "out_channels": 16,
+          "padding": [
+            1,
+            1
+          ],
+          "stride": [
+            1,
+            1
+          ],
+          "weight_shape": [
+            16,
+            8,
+            3,
+            3
+          ]
+        },
+        "change_type": "prune_output_channels",
+        "metadata": {
+          "dependency_relationship": "producer_to_batchnorm_and_next_conv",
+          "kept_output_channel_indices": [
+            0,
+            3,
+            4,
+            6,
+            7,
+            9,
+            10,
+            12,
+            13,
+            14
+          ],
+          "ranking": "l1_weight_magnitude",
+          "reason": "remove lowest L1 weight-magnitude output channels",
+          "removed_output_channel_indices": [
+            1,
+            2,
+            5,
+            8,
+            11,
+            15
+          ],
+          "removed_output_channels": 6
+        },
+        "node": "features.4",
+        "op_type": "Conv2d"
+      },
+      {
+        "after": {
+          "affine": true,
+          "num_features": 10,
+          "running_mean_shape": [
+            10
+          ],
+          "running_var_shape": [
+            10
+          ],
+          "track_running_stats": true,
+          "weight_shape": [
+            10
+          ]
+        },
+        "before": {
+          "affine": true,
+          "num_features": 16,
+          "running_mean_shape": [
+            16
+          ],
+          "running_var_shape": [
+            16
+          ],
+          "track_running_stats": true,
+          "weight_shape": [
+            16
+          ]
+        },
+        "change_type": "dependency_repair",
+        "metadata": {
+          "dependency_relationship": "conv_output_to_batchnorm_features",
+          "reason": "match BatchNorm features to retained Conv2d outputs",
+          "removed_feature_indices": [
+            1,
+            2,
+            5,
+            8,
+            11,
+            15
+          ],
+          "source_node": "features.4"
+        },
+        "node": "features.5",
+        "op_type": "BatchNorm2d"
+      },
+      {
+        "after": {
+          "bias": true,
+          "bias_shape": [
+            24
+          ],
+          "dilation": [
+            1,
+            1
+          ],
+          "groups": 1,
+          "in_channels": 10,
+          "kernel_size": [
+            3,
+            3
+          ],
+          "out_channels": 24,
+          "padding": [
+            1,
+            1
+          ],
+          "stride": [
+            1,
+            1
+          ],
+          "weight_shape": [
+            24,
+            10,
+            3,
+            3
+          ]
+        },
+        "before": {
+          "bias": true,
+          "bias_shape": [
+            24
+          ],
+          "dilation": [
+            1,
+            1
+          ],
+          "groups": 1,
+          "in_channels": 16,
+          "kernel_size": [
+            3,
+            3
+          ],
+          "out_channels": 24,
+          "padding": [
+            1,
+            1
+          ],
+          "stride": [
+            1,
+            1
+          ],
+          "weight_shape": [
+            24,
+            16,
+            3,
+            3
+          ]
+        },
+        "change_type": "dependency_repair",
+        "metadata": {
+          "dependency_relationship": "previous_conv_output_to_conv_input",
+          "reason": "match consumer inputs to physically retained producer outputs",
+          "removed_input_channel_indices": [
+            1,
+            2,
+            5,
+            8,
+            11,
+            15
+          ],
+          "removed_input_channels": 6,
+          "source_node": "features.4"
+        },
+        "node": "features.8",
+        "op_type": "Conv2d"
+      }
+    ],
+    "graph_diff_hash": "f604f79909a69e99a38dbd9e68093f08ef9d878c9f0b7edced89cae1abc5d6a6",
+    "optimized_fx_graph": "graph():\n    %inputs : 'torch.Tensor' [num_users=1] = placeholder[target=inputs]\n    %features_0 : [num_users=1] = call_module[target=features.0](args = (%inputs,), kwargs = {})\n    %features_1 : [num_users=1] = call_module[target=features.1](args = (%features_0,), kwargs = {})\n    %features_2 : [num_users=1] = call_module[target=features.2](args = (%features_1,), kwargs = {})\n    %features_3 : [num_users=1] = call_module[target=features.3](args = (%features_2,), kwargs = {})\n    %features_4 : [num_users=1] = call_module[target=features.4](args = (%features_3,), kwargs = {})\n    %features_5 : [num_users=1] = call_module[target=features.5](args = (%features_4,), kwargs = {})\n    %features_6 : [num_users=1] = call_module[target=features.6](args = (%features_5,), kwargs = {})\n    %features_7 : [num_users=1] = call_module[target=features.7](args = (%features_6,), kwargs = {})\n    %features_8 : [num_users=1] = call_module[target=features.8](args = (%features_7,), kwargs = {})\n    %features_9 : [num_users=1] = call_module[target=features.9](args = (%features_8,), kwargs = {})\n    %features_10 : [num_users=1] = call_module[target=features.10](args = (%features_9,), kwargs = {})\n    %features_11 : [num_users=1] = call_module[target=features.11](args = (%features_10,), kwargs = {})\n    %flatten : [num_users=1] = call_function[target=torch.flatten](args = (%features_11, 1), kwargs = {})\n    %classifier : [num_users=1] = call_module[target=classifier](args = (%flatten,), kwargs = {})\n    return classifier",
+    "optimized_structural_hash": "c47a82c7133a883c88382e5aa4289e50d17bf8d74622cf0b620c1704bd294983"
+  },
+  "latency_interpretation": {
+    "commercial_speedup_claim_supported": false,
+    "noise_sensitive": true,
+    "policy": "SparseFlow V0 does not infer commercial speedup from structural reductions or a single latency run.",
+    "reasons": [
+      "baseline p50 is below 0.1 ms",
+      "baseline coefficient of variation exceeds 0.10",
+      "optimized coefficient of variation exceeds 0.10"
+    ]
+  },
+  "metrics": {
+    "compute": {
+      "baseline": {
+        "count_is_complete": false,
+        "flops": 368832,
+        "macs": 184416,
+        "unsupported_operators": [
+          "AdaptiveAvgPool2d",
+          "BatchNorm2d",
+          "MaxPool2d",
+          "ReLU",
+          "flatten"
+        ]
+      },
+      "convention": "1 MAC = 2 FLOPs",
+      "flop_reduction_percent": 46.85059864653826,
+      "implementation": "sparseflow.fx_conv_linear_counter_v1",
+      "input_shape": [
+        1,
+        3,
+        16,
+        16
+      ],
+      "mac_reduction_percent": 46.85059864653826,
+      "optimized": {
+        "count_is_complete": false,
+        "flops": 196032,
+        "macs": 98016,
+        "unsupported_operators": [
+          "AdaptiveAvgPool2d",
+          "BatchNorm2d",
+          "MaxPool2d",
+          "ReLU",
+          "flatten"
+        ]
+      }
+    },
+    "fidelity": {
+      "absolute_error_max": 0.07513802498579025,
+      "absolute_error_mean": 0.03669359162449837,
+      "batch_size": 8,
+      "is_task_accuracy": false,
+      "label": "untrained_reference_model_output_fidelity_proxy",
+      "method": "deterministic random-input output tensor comparison",
+      "outputs_finite": true,
+      "passed": true,
+      "relative_l2_error": 0.4274349900593022,
+      "tolerance": {
+        "absolute_max": null,
+        "relative_l2_max": 1.0
+      }
+    },
+    "latency_ms": {
+      "baseline": {
+        "coefficient_of_variation": 0.103741209108906,
+        "maximum": 0.1143,
+        "mean": 0.08593666666666665,
+        "minimum": 0.0779,
+        "p50": 0.0827,
+        "p95": 0.105275,
+        "samples": [
+          0.1143,
+          0.0826,
+          0.0847,
+          0.0823,
+          0.081,
+          0.0835,
+          0.0807,
+          0.0843,
+          0.0832,
+          0.0822,
+          0.0828,
+          0.0817,
+          0.0812,
+          0.0821,
+          0.0839,
+          0.0836,
+          0.0821,
+          0.083,
+          0.0815,
+          0.1013,
+          0.105,
+          0.0843,
+          0.0832,
+          0.1055,
+          0.0988,
+          0.0805,
+          0.0779,
+          0.0781,
+          0.0812,
+          0.0816
+        ],
+        "samples_sha256": "e2ecfce174e752fdf3d113ecd1d1f49b1707ccc8e5825138145be977665206fd",
+        "standard_deviation": 0.008915173706789016
+      },
+      "methodology": {
+        "clock": "time.perf_counter_ns",
+        "execution_mode": "ORT_SEQUENTIAL",
+        "input_shape": [
+          1,
+          3,
+          16,
+          16
+        ],
+        "inter_op_threads": 1,
+        "intra_op_threads": 1,
+        "measured_runs": 30,
+        "provider": "CPUExecutionProvider",
+        "warmup_runs": 5
+      },
+      "optimized": {
+        "coefficient_of_variation": 0.26655317304840326,
+        "maximum": 0.0995,
+        "mean": 0.05779999999999999,
+        "minimum": 0.0428,
+        "p50": 0.052599999999999994,
+        "p95": 0.08780999999999994,
+        "samples": [
+          0.0461,
+          0.05,
+          0.0626,
+          0.0778,
+          0.0679,
+          0.051,
+          0.0456,
+          0.044,
+          0.0472,
+          0.0568,
+          0.0468,
+          0.045,
+          0.0446,
+          0.0598,
+          0.0725,
+          0.0546,
+          0.0463,
+          0.0432,
+          0.0432,
+          0.0428,
+          0.0438,
+          0.0542,
+          0.0563,
+          0.0758,
+          0.0995,
+          0.0655,
+          0.096,
+          0.0723,
+          0.0473,
+          0.0755
+        ],
+        "samples_sha256": "2fc73558e1e271fd0d293ecf9852f0075f7af818bab1ad46a57040d4a9db9ff7",
+        "standard_deviation": 0.015406773402197706
+      }
+    },
+    "parameters": {
+      "baseline": 5068,
+      "baseline_trainable": 5068,
+      "optimized": 2962,
+      "optimized_trainable": 2962,
+      "reduction_percent": 41.55485398579321
+    },
+    "serialized_size_bytes": {
+      "onnx": {
+        "baseline": 22021,
+        "optimized": 13668,
+        "reduction_percent": 37.93197402479451
+      },
+      "pytorch_state_dict": {
+        "baseline": 28062,
+        "optimized": 19550,
+        "reduction_percent": 30.332834438030076
+      }
+    }
+  },
+  "model": {
+    "fidelity_is_proxy": true,
+    "identifier": "reference_cnn_v1"
+  },
+  "optimization": {
+    "config": {
+      "dependency_aware": true,
+      "ranking": "l1_weight_magnitude",
+      "ratio": 0.375,
+      "supported_pattern": "sequential_conv_batchnorm_conv",
+      "target_op_types": [
+        "Conv2d"
+      ]
+    },
+    "metadata": {
+      "changed_nodes": 5,
+      "dependency_graph_nodes": 16,
+      "graph_change_count": 6,
+      "scope": "sequential Conv2d-BatchNorm2d dependency chains"
+    },
+    "pass_name": "channel_prune"
+  },
+  "product": {
+    "commercial_benchmark": false,
+    "current_milestone": "SparseFlow V0",
+    "demonstration_type": "physical_channel_pruning_mechanism_demonstration",
+    "next_milestone": "SparseFlow V1: ResNet-18 dependency-aware physical channel pruning, ONNX Runtime CPU deployment, and measured accuracy/latency evidence on a real evaluation workload.",
+    "positioning": "SparseFlow V0: reproducible optimization and evidence harness, validated with a deterministic physical channel-pruning demonstration."
+  },
+  "run": {
+    "git": {
+      "commit_hash": "c6d5e6dd2fced15dd2a3359d6f7a65e9f1f76a1e",
+      "dirty": true
+    },
+    "id": "run-2d969956e8d6156a",
+    "input_shape": [
+      1,
+      3,
+      16,
+      16
+    ],
+    "repository": {
+      "identifier": "sparseflow-v1",
+      "path": "C:\\Users\\15879\\Downloads\\sparseflow-v1"
+    },
+    "seed": 1234,
+    "timestamp_utc": "2026-08-03T20:35:57Z"
+  },
+  "schema_version": "0.3.0"
+}

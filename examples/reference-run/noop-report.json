@@ -1,0 +1,293 @@
+{
+  "artifacts": {
+    "baseline": {
+      "model_hash": "e8ae51a407bb000a3c5ba0ff9b4552bd21096ed86dcaf16e0d4ce8ba619a2e22",
+      "onnx_opset": 17,
+      "onnx_sha256": "2c9c04cf24aace7bbb857cdc04874ea2a67ce205ba8323114b4cb3ddc4e40631",
+      "onnx_validated": true,
+      "pytorch_sha256": "ffcc05a0c032b76426bb5ccc7480a6413e7dd7fbfa922ac1099a7377df455eb2"
+    },
+    "optimized": {
+      "model_hash": "e8ae51a407bb000a3c5ba0ff9b4552bd21096ed86dcaf16e0d4ce8ba619a2e22",
+      "onnx_opset": 17,
+      "onnx_sha256": "2c9c04cf24aace7bbb857cdc04874ea2a67ce205ba8323114b4cb3ddc4e40631",
+      "onnx_validated": true,
+      "pytorch_sha256": "ffcc05a0c032b76426bb5ccc7480a6413e7dd7fbfa922ac1099a7377df455eb2"
+    }
+  },
+  "configuration": {
+    "input_shape": [
+      1,
+      3,
+      16,
+      16
+    ],
+    "inter_op_threads": 1,
+    "intra_op_threads": 1,
+    "measured_runs": 30,
+    "model_identifier": "reference_cnn_v1",
+    "output_report_filename": "report-noop.json",
+    "pass_name": "noop",
+    "preset": "noop-control",
+    "pruning_ratio": 0.0,
+    "seed": 1234,
+    "warmup_runs": 5
+  },
+  "environment": {
+    "hardware": {
+      "architecture": "64bit",
+      "cpu_model": "Intel64 Family 6 Model 126 Stepping 5, GenuineIntel",
+      "logical_cpu_count": 8,
+      "machine": "AMD64",
+      "operating_system": "Windows",
+      "operating_system_release": "10"
+    },
+    "process": {
+      "mkl_num_threads": null,
+      "omp_num_threads": null,
+      "onnxruntime_execution_mode": "ORT_SEQUENTIAL",
+      "onnxruntime_inter_op_threads": 1,
+      "onnxruntime_intra_op_threads": 1,
+      "torch_num_interop_threads": 4,
+      "torch_num_threads": 4
+    },
+    "software": {
+      "numpy": "2.2.6",
+      "onnx": "1.20.1",
+      "onnxruntime": "1.23.2",
+      "python": "3.10.11",
+      "torch": "2.10.0+cpu"
+    }
+  },
+  "graph": {
+    "baseline_fx_graph": "graph():\n    %inputs : 'torch.Tensor' [num_users=1] = placeholder[target=inputs]\n    %features_0 : [num_users=1] = call_module[target=features.0](args = (%inputs,), kwargs = {})\n    %features_1 : [num_users=1] = call_module[target=features.1](args = (%features_0,), kwargs = {})\n    %features_2 : [num_users=1] = call_module[target=features.2](args = (%features_1,), kwargs = {})\n    %features_3 : [num_users=1] = call_module[target=features.3](args = (%features_2,), kwargs = {})\n    %features_4 : [num_users=1] = call_module[target=features.4](args = (%features_3,), kwargs = {})\n    %features_5 : [num_users=1] = call_module[target=features.5](args = (%features_4,), kwargs = {})\n    %features_6 : [num_users=1] = call_module[target=features.6](args = (%features_5,), kwargs = {})\n    %features_7 : [num_users=1] = call_module[target=features.7](args = (%features_6,), kwargs = {})\n    %features_8 : [num_users=1] = call_module[target=features.8](args = (%features_7,), kwargs = {})\n    %features_9 : [num_users=1] = call_module[target=features.9](args = (%features_8,), kwargs = {})\n    %features_10 : [num_users=1] = call_module[target=features.10](args = (%features_9,), kwargs = {})\n    %features_11 : [num_users=1] = call_module[target=features.11](args = (%features_10,), kwargs = {})\n    %flatten : [num_users=1] = call_function[target=torch.flatten](args = (%features_11, 1), kwargs = {})\n    %classifier : [num_users=1] = call_module[target=classifier](args = (%flatten,), kwargs = {})\n    return classifier",
+    "baseline_structural_hash": "23dbfec2ad7ca9d87c4dcd08dc748fbb5fd1a3eb4243f5ddd87d379271b051ad",
+    "changes": [],
+    "graph_diff_hash": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "optimized_fx_graph": "graph():\n    %inputs : 'torch.Tensor' [num_users=1] = placeholder[target=inputs]\n    %features_0 : [num_users=1] = call_module[target=features.0](args = (%inputs,), kwargs = {})\n    %features_1 : [num_users=1] = call_module[target=features.1](args = (%features_0,), kwargs = {})\n    %features_2 : [num_users=1] = call_module[target=features.2](args = (%features_1,), kwargs = {})\n    %features_3 : [num_users=1] = call_module[target=features.3](args = (%features_2,), kwargs = {})\n    %features_4 : [num_users=1] = call_module[target=features.4](args = (%features_3,), kwargs = {})\n    %features_5 : [num_users=1] = call_module[target=features.5](args = (%features_4,), kwargs = {})\n    %features_6 : [num_users=1] = call_module[target=features.6](args = (%features_5,), kwargs = {})\n    %features_7 : [num_users=1] = call_module[target=features.7](args = (%features_6,), kwargs = {})\n    %features_8 : [num_users=1] = call_module[target=features.8](args = (%features_7,), kwargs = {})\n    %features_9 : [num_users=1] = call_module[target=features.9](args = (%features_8,), kwargs = {})\n    %features_10 : [num_users=1] = call_module[target=features.10](args = (%features_9,), kwargs = {})\n    %features_11 : [num_users=1] = call_module[target=features.11](args = (%features_10,), kwargs = {})\n    %flatten : [num_users=1] = call_function[target=torch.flatten](args = (%features_11, 1), kwargs = {})\n    %classifier : [num_users=1] = call_module[target=classifier](args = (%flatten,), kwargs = {})\n    return classifier",
+    "optimized_structural_hash": "23dbfec2ad7ca9d87c4dcd08dc748fbb5fd1a3eb4243f5ddd87d379271b051ad"
+  },
+  "latency_interpretation": {
+    "commercial_speedup_claim_supported": false,
+    "noise_sensitive": true,
+    "policy": "SparseFlow V0 does not infer commercial speedup from structural reductions or a single latency run.",
+    "reasons": [
+      "baseline p50 is below 0.1 ms",
+      "baseline coefficient of variation exceeds 0.10",
+      "optimized coefficient of variation exceeds 0.10"
+    ]
+  },
+  "metrics": {
+    "compute": {
+      "baseline": {
+        "count_is_complete": false,
+        "flops": 368832,
+        "macs": 184416,
+        "unsupported_operators": [
+          "AdaptiveAvgPool2d",
+          "BatchNorm2d",
+          "MaxPool2d",
+          "ReLU",
+          "flatten"
+        ]
+      },
+      "convention": "1 MAC = 2 FLOPs",
+      "flop_reduction_percent": 0.0,
+      "implementation": "sparseflow.fx_conv_linear_counter_v1",
+      "input_shape": [
+        1,
+        3,
+        16,
+        16
+      ],
+      "mac_reduction_percent": 0.0,
+      "optimized": {
+        "count_is_complete": false,
+        "flops": 368832,
+        "macs": 184416,
+        "unsupported_operators": [
+          "AdaptiveAvgPool2d",
+          "BatchNorm2d",
+          "MaxPool2d",
+          "ReLU",
+          "flatten"
+        ]
+      }
+    },
+    "fidelity": {
+      "absolute_error_max": 0.0,
+      "absolute_error_mean": 0.0,
+      "batch_size": 8,
+      "is_task_accuracy": false,
+      "label": "untrained_reference_model_output_fidelity_proxy",
+      "method": "deterministic random-input output tensor comparison",
+      "outputs_finite": true,
+      "passed": true,
+      "relative_l2_error": 0.0,
+      "tolerance": {
+        "absolute_max": 1e-06,
+        "relative_l2_max": 1e-05
+      }
+    },
+    "latency_ms": {
+      "baseline": {
+        "coefficient_of_variation": 0.3565667394649213,
+        "maximum": 0.1599,
+        "mean": 0.08232,
+        "minimum": 0.0438,
+        "p50": 0.0731,
+        "p95": 0.14306999999999997,
+        "samples": [
+          0.1226,
+          0.1164,
+          0.0843,
+          0.0779,
+          0.0709,
+          0.0648,
+          0.0646,
+          0.0709,
+          0.1599,
+          0.1004,
+          0.0635,
+          0.0645,
+          0.0681,
+          0.0876,
+          0.1464,
+          0.139,
+          0.0935,
+          0.1127,
+          0.0753,
+          0.0758,
+          0.0841,
+          0.0669,
+          0.0652,
+          0.0643,
+          0.0781,
+          0.0497,
+          0.0694,
+          0.0446,
+          0.0438,
+          0.0444
+        ],
+        "samples_sha256": "cc49c5f7b8d54cb337595cad772564c790549e67bf2fcdc467bd894e46cff7f7",
+        "standard_deviation": 0.02935257399275232
+      },
+      "methodology": {
+        "clock": "time.perf_counter_ns",
+        "execution_mode": "ORT_SEQUENTIAL",
+        "input_shape": [
+          1,
+          3,
+          16,
+          16
+        ],
+        "inter_op_threads": 1,
+        "intra_op_threads": 1,
+        "measured_runs": 30,
+        "provider": "CPUExecutionProvider",
+        "warmup_runs": 5
+      },
+      "optimized": {
+        "coefficient_of_variation": 0.1896029455968416,
+        "maximum": 0.0778,
+        "mean": 0.04277333333333333,
+        "minimum": 0.039,
+        "p50": 0.04015,
+        "p95": 0.05745999999999995,
+        "samples": [
+          0.0778,
+          0.0437,
+          0.0405,
+          0.0427,
+          0.0394,
+          0.0401,
+          0.0401,
+          0.0396,
+          0.0395,
+          0.0469,
+          0.048,
+          0.0402,
+          0.0399,
+          0.0394,
+          0.0393,
+          0.0397,
+          0.0394,
+          0.0398,
+          0.0398,
+          0.039,
+          0.0394,
+          0.0393,
+          0.0652,
+          0.0405,
+          0.041,
+          0.0406,
+          0.0407,
+          0.0407,
+          0.0405,
+          0.0405
+        ],
+        "samples_sha256": "0799068972a60df9d3fcb18e91462ba3425d7342eb102f9b298269a4989f0162",
+        "standard_deviation": 0.008109949992995571
+      }
+    },
+    "parameters": {
+      "baseline": 5068,
+      "baseline_trainable": 5068,
+      "optimized": 5068,
+      "optimized_trainable": 5068,
+      "reduction_percent": 0.0
+    },
+    "serialized_size_bytes": {
+      "onnx": {
+        "baseline": 22021,
+        "optimized": 22021,
+        "reduction_percent": 0.0
+      },
+      "pytorch_state_dict": {
+        "baseline": 28062,
+        "optimized": 28062,
+        "reduction_percent": 0.0
+      }
+    }
+  },
+  "model": {
+    "fidelity_is_proxy": true,
+    "identifier": "reference_cnn_v1"
+  },
+  "optimization": {
+    "config": {
+      "type": "no_op"
+    },
+    "metadata": {
+      "transformation": "none"
+    },
+    "pass_name": "noop"
+  },
+  "product": {
+    "commercial_benchmark": false,
+    "current_milestone": "SparseFlow V0",
+    "demonstration_type": "physical_channel_pruning_mechanism_demonstration",
+    "next_milestone": "SparseFlow V1: ResNet-18 dependency-aware physical channel pruning, ONNX Runtime CPU deployment, and measured accuracy/latency evidence on a real evaluation workload.",
+    "positioning": "SparseFlow V0: reproducible optimization and evidence harness, validated with a deterministic physical channel-pruning demonstration."
+  },
+  "run": {
+    "git": {
+      "commit_hash": "c6d5e6dd2fced15dd2a3359d6f7a65e9f1f76a1e",
+      "dirty": true
+    },
+    "id": "run-ed77a172ad1a3739",
+    "input_shape": [
+      1,
+      3,
+      16,
+      16
+    ],
+    "repository": {
+      "identifier": "sparseflow-v1",
+      "path": "C:\\Users\\15879\\Downloads\\sparseflow-v1"
+    },
+    "seed": 1234,
+    "timestamp_utc": "2026-08-03T20:36:07Z"
+  },
+  "schema_version": "0.3.0"
+}

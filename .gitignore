@@ -11,4 +11,10 @@ dist/
 *.egg-info/
 report.json
 report-*.json
+artifacts/
+*.onnx
 .sparseflow-artifacts/
+!examples/
+!examples/reference-run/
+!examples/reference-run/channel-prune-report.json
+!examples/reference-run/noop-report.json

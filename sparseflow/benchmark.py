@@ -1,4 +1,4 @@
-"""End-to-end ONNX Runtime CPU benchmark workflow."""
+"""SparseFlow V0 ONNX Runtime CPU evidence measurement workflow."""
 
 from __future__ import annotations
 
@@ -29,14 +29,20 @@ from sparseflow.passes import OptimizationPass
 from sparseflow.serialization import sha256_bytes, sha256_file, sha256_json
 
 
+MICROBENCHMARK_P50_THRESHOLD_MS = 0.1
+NOISE_COEFFICIENT_OF_VARIATION_THRESHOLD = 0.10
+
+
 @dataclass(frozen=True)
 class BenchmarkResult:
     model_identifier: str
     benchmark_config: dict[str, Any]
+    resolved_configuration: dict[str, Any]
     optimization: dict[str, Any]
     baseline: dict[str, Any]
     optimized: dict[str, Any]
     latency_methodology: dict[str, Any]
+    latency_interpretation: dict[str, Any]
     fidelity: dict[str, Any]
     graph: dict[str, Any]
     artifacts: dict[str, Any]
@@ -54,6 +60,51 @@ def serialize_state_dict(model: nn.Module) -> bytes:
     buffer = io.BytesIO()
     torch.save(model.state_dict(), buffer)
     return buffer.getvalue()
+
+
+def summarize_latency_samples(samples: list[float]) -> dict[str, Any]:
+    if not samples:
+        raise ValueError("at least one latency sample is required")
+    values = np.asarray(samples, dtype=np.float64)
+    if not np.isfinite(values).all() or np.any(values < 0):
+        raise ValueError("latency samples must be finite and non-negative")
+    mean = float(values.mean())
+    standard_deviation = float(values.std(ddof=0))
+    coefficient_of_variation = standard_deviation / mean if mean > 0 else 0.0
+    normalized_samples = [float(value) for value in values]
+    return {
+        "samples": normalized_samples,
+        "samples_sha256": sha256_json(normalized_samples),
+        "p50": float(np.percentile(values, 50)),
+        "p95": float(np.percentile(values, 95)),
+        "minimum": float(values.min()),
+        "maximum": float(values.max()),
+        "mean": mean,
+        "standard_deviation": standard_deviation,
+        "coefficient_of_variation": float(coefficient_of_variation),
+    }
+
+
+def interpret_latency(
+    baseline: dict[str, Any],
+    optimized: dict[str, Any],
+) -> dict[str, Any]:
+    reasons: list[str] = []
+    if baseline["p50"] < MICROBENCHMARK_P50_THRESHOLD_MS:
+        reasons.append("baseline p50 is below 0.1 ms")
+    if baseline["coefficient_of_variation"] > NOISE_COEFFICIENT_OF_VARIATION_THRESHOLD:
+        reasons.append("baseline coefficient of variation exceeds 0.10")
+    if optimized["coefficient_of_variation"] > NOISE_COEFFICIENT_OF_VARIATION_THRESHOLD:
+        reasons.append("optimized coefficient of variation exceeds 0.10")
+    return {
+        "noise_sensitive": bool(reasons),
+        "reasons": reasons,
+        "commercial_speedup_claim_supported": False,
+        "policy": (
+            "SparseFlow V0 does not infer commercial speedup from structural "
+            "reductions or a single latency run."
+        ),
+    }
 
 
 def export_onnx(
@@ -115,12 +166,7 @@ def _latency_samples(
         session.run(None, feed)
         samples.append((time.perf_counter_ns() - started) / 1_000_000.0)
 
-    return {
-        "samples": samples,
-        "samples_sha256": sha256_json(samples),
-        "p50": float(np.percentile(samples, 50)),
-        "p95": float(np.percentile(samples, 95)),
-    }
+    return summarize_latency_samples(samples)
 
 
 def _measure_model(
@@ -215,12 +261,30 @@ def run_benchmark(
         )
 
     changes = optimization_result.graph_changes
+    pass_configuration = optimization_pass.config()
+    resolved_configuration = {
+        "preset": benchmark_config.preset_name,
+        "model_identifier": getattr(model, "identifier", model.__class__.__name__),
+        "seed": benchmark_config.seed,
+        "input_shape": list(benchmark_config.input_shape),
+        "pass_name": optimization_pass.name.replace("_", "-"),
+        "pruning_ratio": float(pass_configuration.get("ratio", 0.0)),
+        "warmup_runs": benchmark_config.warmup_runs,
+        "measured_runs": benchmark_config.measured_runs,
+        "intra_op_threads": benchmark_config.threads,
+        "inter_op_threads": benchmark_config.threads,
+        "output_report_filename": benchmark_config.output_report_filename,
+    }
+    latency_interpretation = interpret_latency(
+        baseline_metrics["latency_ms"], optimized_metrics["latency_ms"]
+    )
     return BenchmarkResult(
         model_identifier=getattr(model, "identifier", model.__class__.__name__),
         benchmark_config=benchmark_config.as_dict(),
+        resolved_configuration=resolved_configuration,
         optimization={
             "pass_name": optimization_pass.name,
-            "config": optimization_pass.config(),
+            "config": pass_configuration,
             "metadata": optimization_result.metadata,
         },
         baseline=baseline_metrics,
@@ -229,11 +293,13 @@ def run_benchmark(
             "provider": "CPUExecutionProvider",
             "warmup_runs": benchmark_config.warmup_runs,
             "measured_runs": benchmark_config.measured_runs,
-            "threads": benchmark_config.threads,
+            "intra_op_threads": benchmark_config.threads,
+            "inter_op_threads": benchmark_config.threads,
             "execution_mode": "ORT_SEQUENTIAL",
             "clock": "time.perf_counter_ns",
             "input_shape": list(benchmark_config.input_shape),
         },
+        latency_interpretation=latency_interpretation,
         fidelity=_fidelity_proxy(
             baseline, optimized, benchmark_config, optimization_pass.name
         ),

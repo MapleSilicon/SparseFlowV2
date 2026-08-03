@@ -18,7 +18,7 @@ def _conv_block(in_channels: int, out_channels: int) -> list[nn.Module]:
 
 
 class ReferenceCNN(nn.Module):
-    """Sequential Conv-BN model supported by the V0/V1 pruning pass."""
+    """Sequential Conv-BN model supported by the SparseFlow V0 pruning pass."""
 
     identifier = "reference_cnn_v1"
 
