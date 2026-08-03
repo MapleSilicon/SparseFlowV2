@@ -1,9 +1,15 @@
 import copy
+import json
 from pathlib import Path
 
 import pytest
 
-from sparseflow.report import EvidenceValidationError, validate_evidence_report, write_evidence_report
+from sparseflow.report import (
+    EvidenceValidationError,
+    render_result_table,
+    validate_evidence_report,
+    write_evidence_report,
+)
 
 
 def _valid_report():
@@ -92,26 +98,114 @@ def _valid_report():
 @pytest.mark.parametrize(
     "path",
     [
-        ("run", "git", "commit_hash"),
-        ("environment", "hardware"),
-        ("optimization", "config"),
+        ("schema_version",),
+        ("product",),
+        ("run",),
+        ("run", "id"),
+        ("run", "timestamp_utc"),
+        ("run", "seed"),
         ("run", "input_shape"),
-        ("metrics", "latency_ms", "methodology"),
-        ("graph", "graph_diff_hash"),
+        ("run", "git"),
+        ("environment",),
+        ("environment", "hardware"),
+        ("environment", "software"),
+        ("model",),
+        ("model", "identifier"),
+        ("configuration",),
+        ("optimization",),
+        ("optimization", "config"),
+        ("metrics",),
+        ("metrics", "parameters"),
+        ("metrics", "serialized_size_bytes"),
+        ("metrics", "latency_ms"),
+        ("metrics", "compute"),
         ("metrics", "fidelity"),
+        ("latency_interpretation",),
+        ("graph",),
+        ("graph", "graph_diff_hash"),
+        ("artifacts",),
     ],
 )
-def test_mandatory_evidence_is_enforced(path, tmp_path):
+def test_each_mandatory_evidence_path_is_rejected_when_missing(path):
     report = copy.deepcopy(_valid_report())
     target = report
     for key in path[:-1]:
         target = target[key]
     del target[path[-1]]
 
+    with pytest.raises(EvidenceValidationError) as exc_info:
+        validate_evidence_report(report)
+
+    assert ".".join(path) in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("operation", "path", "value"),
+    [
+        ("remove", ("environment", "hardware"), None),
+        ("remove", ("optimization", "config"), None),
+        ("remove", ("graph", "graph_diff_hash"), None),
+        ("set", ("run", "seed"), object()),
+        ("set", ("metrics", "fidelity", "absolute_error_max"), float("nan")),
+        ("set", ("metrics", "fidelity", "relative_l2_error"), float("inf")),
+    ],
+)
+def test_invalid_report_never_creates_output_file(
+    operation,
+    path,
+    value,
+    tmp_path,
+    monkeypatch,
+):
+    report = copy.deepcopy(_valid_report())
+    target = report
+    for key in path[:-1]:
+        target = target[key]
+    if operation == "remove":
+        del target[path[-1]]
+    else:
+        target[path[-1]] = value
     output = tmp_path / "report.json"
+    atomic_write_calls = []
+    monkeypatch.setattr(
+        "sparseflow.report.atomic_write_json",
+        lambda *args, **kwargs: atomic_write_calls.append((args, kwargs)),
+    )
+
     with pytest.raises(EvidenceValidationError):
         write_evidence_report(report, output)
+
     assert not output.exists()
+    assert atomic_write_calls == []
+
+
+def test_missing_schema_file_is_actionable(tmp_path):
+    schema_path = tmp_path / "missing-schema.json"
+
+    with pytest.raises(EvidenceValidationError) as exc_info:
+        validate_evidence_report(_valid_report(), schema_path)
+
+    assert "unable to load evidence schema" in str(exc_info.value)
+    assert str(schema_path) in str(exc_info.value)
+
+
+def test_malformed_json_schema_file_is_actionable(tmp_path):
+    schema_path = tmp_path / "malformed-schema.json"
+    schema_path.write_text("{not-json", encoding="utf-8")
+
+    with pytest.raises(EvidenceValidationError) as exc_info:
+        validate_evidence_report(_valid_report(), schema_path)
+
+    assert "unable to load evidence schema" in str(exc_info.value)
+    assert str(schema_path) in str(exc_info.value)
+
+
+def test_syntactically_valid_but_invalid_json_schema_is_actionable(tmp_path):
+    schema_path = tmp_path / "invalid-schema.json"
+    schema_path.write_text(json.dumps({"type": 42}), encoding="utf-8")
+
+    with pytest.raises(EvidenceValidationError, match="invalid checked-in report schema"):
+        validate_evidence_report(_valid_report(), schema_path)
 
 
 def test_report_is_schema_valid_and_deterministically_written(tmp_path):
@@ -133,6 +227,43 @@ def test_old_schema_report_fails_clearly():
 
     with pytest.raises(EvidenceValidationError, match="schema_version"):
         validate_evidence_report(report)
+
+
+def test_console_renderer_contains_metrics_formatting_and_claim_warnings():
+    report = _valid_report()
+    report["latency_interpretation"]["noise_sensitive"] = True
+
+    rendered = render_result_table(report)
+
+    assert "SparseFlow V0 Evidence Benchmark" in rendered
+    assert "Pass: noop" in rendered
+    for row in (
+        "Parameters",
+        "ONNX bytes",
+        "MACs",
+        "FLOPs",
+        "Latency p50 ms",
+        "Latency p95 ms",
+    ):
+        assert row in rendered
+    assert "10" in rendered
+    assert "1.0500" in rendered
+    assert "Fidelity proxy passed: True" in rendered
+    assert "not task accuracy" in rendered
+    assert "Latency noise-sensitive: True" in rendered
+    assert "Commercial speedup claim supported: False" in rendered
+
+
+def test_console_renderer_uses_gate1_heading_and_handles_zero_baseline():
+    report = _valid_report()
+    report["product"]["development_milestone"] = "SparseFlow V1 Gate 1"
+    report["metrics"]["latency_ms"]["baseline"]["p50"] = 0.0
+    report["metrics"]["latency_ms"]["optimized"]["p50"] = 0.0
+
+    rendered = render_result_table(report)
+
+    assert "SparseFlow V1 Gate 1 Evidence Benchmark" in rendered
+    assert "0.0000" in rendered
 
 
 @pytest.mark.parametrize(
