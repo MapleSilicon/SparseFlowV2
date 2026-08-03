@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69,<82", "wheel>=0.42,<1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sparseflow"
+version = "0.2.0"
+description = "Dependency-aware physical Conv2d channel pruning evidence harness"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Maple Silicon Inc." }]
+dependencies = [
+  "torch>=2.2,<3.0",
+  "numpy>=1.24,<3.0",
+  "onnx>=1.15,<2.0",
+  "onnxruntime>=1.17,<2.0",
+  "jsonschema>=4.21,<5.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["sparseflow*"]
+
+[tool.pytest.ini_options]
+addopts = "--cov=sparseflow --cov-report=term-missing --cov-fail-under=80"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["sparseflow"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+]
+show_missing = true
