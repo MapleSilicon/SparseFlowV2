@@ -8,7 +8,9 @@ The repository is a small, offline-verifiable reference implementation. It uses 
 
 SparseFlow V1: ResNet-18 dependency-aware physical channel pruning, ONNX Runtime CPU deployment, and measured accuracy/latency evidence on a real evaluation workload.
 
-V1 is the next milestone, not current functionality. See [docs/resnet18-v1-plan.md](docs/resnet18-v1-plan.md).
+Full V1 remains the next milestone. See [docs/resnet18-v1-plan.md](docs/resnet18-v1-plan.md).
+
+Development status: **SparseFlow V1 Gate 1 is implemented on the `feat/resnet18-v1` branch.** Gate 1 adds deterministic local ResNet-18 construction, complete residual dependency analysis, zero-ratio equivalence validation, ONNX export, and ONNX Runtime CPU execution. It performs no ResNet channel removal.
 
 ## What SparseFlow V0 does
 
@@ -42,6 +44,7 @@ python -m pip install -r requirements.txt
 python -m pytest -q
 python run_bench.py --preset micro-demo
 python run_bench.py --preset noop-control
+python run_bench.py --preset resnet18-gate1
 python scripts/check_release.py
 ```
 
@@ -51,13 +54,21 @@ python scripts/check_release.py
 
 `noop-control` uses the same deterministic model and measurement settings with the `noop` pass, ratio `0.0`, and `report-noop.json`.
 
+`resnet18-gate1` selects the local untrained `resnet18-reference`, input shape `[1, 3, 64, 64]`, the `channel-prune` pass at ratio `0.0`, one warmup, three measured runs, and `report-resnet18-gate1.json`. Despite the pass name, Gate 1 only analyzes dependencies and validates structural neutrality; it does not prune.
+
 Explicit command-line values override preset values:
 
 ```powershell
 python run_bench.py --preset micro-demo --seed 77 --warmup 10 --measured-runs 100 --threads 1 --output report-custom.json
 ```
 
-The selected preset and final resolved values are recorded in the report's `configuration` object. There is no ResNet-18 preset because V0 does not support ResNet-18.
+The selected preset and final resolved values are recorded in the report's `configuration` object. Explicit values continue to override preset values.
+
+The equivalent direct Gate 1 command is:
+
+```powershell
+python run_bench.py --model resnet18-reference --pass channel-prune --pruning-ratio 0.0
+```
 
 ## Evidence report
 
@@ -66,6 +77,8 @@ Schema `0.3.0` adds explicit product positioning, resolved configuration, full l
 `latency_interpretation.commercial_speedup_claim_supported` is false by policy in V0. A report is marked noise-sensitive when baseline p50 is below `0.1 ms` or either latency distribution has a coefficient of variation above `0.10`.
 
 Report assembly and validation live in `sparseflow.report`. Missing mandatory evidence raises `EvidenceValidationError`, and no official report is written. See [docs/benchmark-interpretation.md](docs/benchmark-interpretation.md) for interpretation guidance.
+
+A Gate 1 report additionally records the architecture identifier, full dependency graph, dependency summary, eight residual groups, projection and identity counts, Conv-BN links, classifier dependency, and a measured zero-ratio validation result. It also compares deterministic PyTorch and ONNX Runtime outputs. Gate 1 reports are mechanism evidence, not pruning, accuracy, or speedup evidence.
 
 ## NoOp control
 
@@ -80,7 +93,8 @@ Ordinary root `report*.json`, ONNX files, and artifact directories are generated
 ## Architecture
 
 - `run_bench.py`: CLI, preset resolution, pass selection, and report orchestration.
-- `sparseflow/models.py`: bundled deterministic reference CNN.
+- `sparseflow/models.py`: bundled deterministic reference CNN and local ResNet-18.
+- `sparseflow/dependencies.py`: JSON-serializable ResNet-18 dependency nodes, edges, residual groups, channel constraints, and classifier dependency.
 - `sparseflow/passes.py`: NoOp and supported physical channel-pruning transformations.
 - `sparseflow/benchmark.py`: ONNX export, CPU timing, structural/runtime metrics, fidelity proxy, and hashes.
 - `sparseflow/audit.py`: machine, software, process, repository, and Git metadata.
@@ -90,11 +104,13 @@ Ordinary root `report*.json`, ONNX files, and artifact directories are generated
 
 ## Current limitations
 
-The pruning pass handles only the bundled model's linear dense dependency pattern. It does not repair residual additions, identity/projection branches, concatenations, grouped or depthwise convolutions, or arbitrary classifiers. Fidelity is a deterministic random-input output proxy, not task accuracy. Latency comes from one local CPU process and is not a production workload result.
+The V0 pruning pass handles only the bundled micro-model's linear dense dependency pattern. Gate 1 understands ResNet-18 residual additions and identity/projection dependencies but does not modify them. It does not repair channels after a ResNet transformation, prune grouped or depthwise convolutions, or alter the classifier. Fidelity is a deterministic random-input output proxy, not task accuracy. Latency comes from one local CPU process and is not a production workload result.
 
 ## V1 roadmap
 
-SparseFlow V1 targets ResNet-18 on x86 CPU using ONNX Runtime, with dependency-aware physical `Conv2d` channel pruning and evaluation on a real dataset or defensible fixed validation subset. Work is gated on residual dependency analysis, complete branch repair, valid ONNX execution, explicit task accuracy, repeated latency disclosure, and deterministic structural evidence. No latency improvement is promised before measurement.
+Gate 1 is complete: the local ResNet-18 has eight BasicBlocks across four stages, and the analyzer records eight residual groups, three projection shortcuts, five identity shortcuts, twenty Conv-BN dependencies, eight residual channel constraints, and the classifier input dependency. Ratio `0.0` proves identical tensors, structure, parameters, MACs/FLOPs, outputs, and hashes while still exporting valid ONNX and executing with ONNX Runtime CPU.
+
+Gate 2 remains unimplemented. The broader SparseFlow V1 target is dependency-aware physical `Conv2d` channel pruning on ResNet-18 followed by real task evaluation. That requires actual branch repair, classifier repair, and measured accuracy. No physical ResNet pruning, accuracy evaluation, or latency-improvement claim is present in Gate 1.
 
 ## Explicitly out of scope
 

@@ -6,7 +6,7 @@ ResNet-18 on x86 CPU using ONNX Runtime, with dependency-aware physical Conv2d c
 
 SparseFlow V1: ResNet-18 dependency-aware physical channel pruning, ONNX Runtime CPU deployment, and measured accuracy/latency evidence on a real evaluation workload.
 
-This document defines gates for that milestone. It does not claim the implementation exists and does not promise a latency improvement.
+This document defines gates for that milestone. Gate 1 dependency analysis and zero-ratio validation are now implemented. Gates 2 through 5 remain plans, and no latency improvement is promised.
 
 ## Engineering requirements
 
@@ -20,6 +20,8 @@ Official evidence must record the latency methodology, model-size metrics, MAC/F
 
 ## Gate 1: Graph support
 
+**Status: implemented.**
+
 - Load a local ResNet-18 model without downloading during tests.
 - Identify residual dependency groups.
 - Perform a zero-ratio transformation safely.
@@ -27,7 +29,13 @@ Official evidence must record the latency methodology, model-size metrics, MAC/F
 
 Acceptance requires deterministic dependency-group discovery, no changed channel dimensions at zero ratio, runnable PyTorch execution, identical structural/model hashes, and fidelity within the NoOp-equivalent tolerance.
 
+The implemented local model contains eight BasicBlocks across four residual stages. Analysis records eight residual groups, three projection shortcuts, five identity shortcuts, twenty Conv-BN dependencies, eight equal-width residual-add constraints, and the pooled 512-feature classifier dependency. All structures serialize to deterministic JSON.
+
+At ratio `0.0`, `ChannelPruningPass` performs dependency analysis and returns an unchanged deep copy. Evidence verifies no tensor or channel change, an empty graph diff, identical model and structural hashes, identical parameter and MAC/FLOP counts, identical PyTorch outputs, valid ONNX artifacts, ONNX Runtime CPU execution, and approximate PyTorch/ONNX output equivalence.
+
 ## Gate 2: Structural pruning
+
+**Status: not implemented.**
 
 - Physically remove channels.
 - Repair every dependent branch.
@@ -39,6 +47,8 @@ Acceptance requires a non-zero structural reduction, valid dense tensor shapes a
 
 ## Gate 3: Evaluation
 
+**Status: not implemented.** No dataset, task-accuracy result, or accuracy-improvement claim is part of Gate 1.
+
 - Measure baseline accuracy.
 - Measure optimized accuracy.
 - Report absolute accuracy loss.
@@ -47,6 +57,8 @@ Acceptance requires a non-zero structural reduction, valid dense tensor shapes a
 Acceptance requires a documented real dataset or defensible fixed validation subset, deterministic preprocessing and sample selection, explicit baseline and optimized task metrics, and no substitution of the fidelity proxy for task accuracy. No target accuracy number is assumed before measurement.
 
 ## Gate 4: Deployment evidence
+
+**Status: not implemented as a performance gate.** Gate 1 confirms deployability and records diagnostic CPU timings, but those timings support no latency claim.
 
 - Collect p50 and p95 latency.
 - Repeat runs.
@@ -58,6 +70,8 @@ Acceptance requires a documented real dataset or defensible fixed validation sub
 Acceptance requires a documented run protocol, all planned repetitions retained, machine/software/process provenance, complete latency distributions, and honest reporting whether latency improved or regressed.
 
 ## Gate 5: Acceptance
+
+**Status: not implemented.** Full V1 acceptance depends on Gates 2 through 4.
 
 - Structural reduction must be non-zero.
 - Task accuracy must be explicitly measured.

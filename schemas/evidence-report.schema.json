@@ -13,9 +13,10 @@
       "properties": {
         "current_milestone": {"const": "SparseFlow V0"},
         "positioning": {"const": "SparseFlow V0: reproducible optimization and evidence harness, validated with a deterministic physical channel-pruning demonstration."},
-        "demonstration_type": {"const": "physical_channel_pruning_mechanism_demonstration"},
+        "demonstration_type": {"enum": ["physical_channel_pruning_mechanism_demonstration", "resnet18_dependency_analysis_zero_ratio_validation"]},
         "commercial_benchmark": {"const": false},
-        "next_milestone": {"type": "string", "minLength": 1}
+        "next_milestone": {"type": "string", "minLength": 1},
+        "development_milestone": {"type": "string", "minLength": 1}
       }
     },
     "run": {
@@ -61,7 +62,11 @@
     "model": {
       "type": "object",
       "required": ["identifier", "fidelity_is_proxy"],
-      "properties": {"identifier": {"type": "string", "minLength": 1}, "fidelity_is_proxy": {"const": true}}
+      "properties": {
+        "identifier": {"type": "string", "minLength": 1},
+        "architecture_identifier": {"type": "string", "minLength": 1},
+        "fidelity_is_proxy": {"const": true}
+      }
     },
     "configuration": {
       "type": "object",
@@ -170,6 +175,44 @@
       "properties": {"baseline": {"$ref": "#/$defs/artifact"}, "optimized": {"$ref": "#/$defs/artifact"}}
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "model": {
+            "properties": {"identifier": {"const": "resnet18-reference"}},
+            "required": ["identifier"]
+          }
+        },
+        "required": ["model"]
+      },
+      "then": {
+        "properties": {
+          "product": {
+            "required": ["development_milestone"],
+            "properties": {
+              "development_milestone": {"const": "SparseFlow V1 Gate 1"},
+              "demonstration_type": {"const": "resnet18_dependency_analysis_zero_ratio_validation"}
+            }
+          },
+          "model": {"required": ["architecture_identifier"]},
+          "optimization": {
+            "properties": {
+              "metadata": {
+                "required": ["dependency_summary", "dependency_analysis", "zero_ratio_validation"]
+              }
+            }
+          },
+          "artifacts": {
+            "properties": {
+              "baseline": {"required": ["pytorch_onnx_validation"]},
+              "optimized": {"required": ["pytorch_onnx_validation"]}
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "inputShape": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer", "minimum": 1}},
     "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -211,7 +254,20 @@
         "pytorch_sha256": {"$ref": "#/$defs/hash"},
         "onnx_sha256": {"$ref": "#/$defs/hash"},
         "onnx_validated": {"const": true},
-        "onnx_opset": {"type": "integer", "minimum": 13}
+        "onnx_opset": {"type": "integer", "minimum": 13},
+        "pytorch_onnx_validation": {
+          "type": "object",
+          "required": ["provider", "pytorch_output_shape", "onnx_output_shape", "output_shape_matches", "absolute_error_max", "relative_l2_error", "passed"],
+          "properties": {
+            "provider": {"const": "CPUExecutionProvider"},
+            "pytorch_output_shape": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+            "onnx_output_shape": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+            "output_shape_matches": {"const": true},
+            "absolute_error_max": {"type": "number", "minimum": 0},
+            "relative_l2_error": {"type": "number", "minimum": 0},
+            "passed": {"const": true}
+          }
+        }
       }
     }
   }

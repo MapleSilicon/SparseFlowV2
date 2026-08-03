@@ -96,15 +96,28 @@ def build_evidence_report(
     optimized = result.optimized
     baseline_compute = baseline["compute"]
     optimized_compute = optimized["compute"]
+    gate1 = (
+        result.optimization["metadata"].get("gate")
+        == "resnet18_gate1_dependency_analysis"
+    )
+    product = {
+        "current_milestone": "SparseFlow V0",
+        "positioning": V0_POSITIONING,
+        "demonstration_type": "physical_channel_pruning_mechanism_demonstration",
+        "commercial_benchmark": False,
+        "next_milestone": V1_MILESTONE,
+    }
+    if gate1:
+        product = {
+            **product,
+            "development_milestone": "SparseFlow V1 Gate 1",
+            "demonstration_type": (
+                "resnet18_dependency_analysis_zero_ratio_validation"
+            ),
+        }
     report = {
         "schema_version": SCHEMA_VERSION,
-        "product": {
-            "current_milestone": "SparseFlow V0",
-            "positioning": V0_POSITIONING,
-            "demonstration_type": "physical_channel_pruning_mechanism_demonstration",
-            "commercial_benchmark": False,
-            "next_milestone": V1_MILESTONE,
-        },
+        "product": product,
         "run": {
             "id": run_identifier,
             "timestamp_utc": timestamp,
@@ -120,6 +133,7 @@ def build_evidence_report(
         },
         "model": {
             "identifier": result.model_identifier,
+            "architecture_identifier": result.architecture_identifier,
             "fidelity_is_proxy": True,
         },
         "configuration": result.resolved_configuration,
@@ -214,7 +228,11 @@ def render_result_table(report: dict[str, Any]) -> str:
         ("Latency p95 ms", latency["baseline"]["p95"], latency["optimized"]["p95"], _reduction_percent(latency["baseline"]["p95"], latency["optimized"]["p95"])),
     ]
     lines = [
-        "SparseFlow V0 Evidence Benchmark",
+        (
+            "SparseFlow V1 Gate 1 Evidence Benchmark"
+            if report["product"].get("development_milestone")
+            else "SparseFlow V0 Evidence Benchmark"
+        ),
         f"Pass: {report['optimization']['pass_name']}",
         "-" * 72,
         f"{'Metric':<22}{'Baseline':>16}{'Optimized':>16}{'Reduction':>14}",

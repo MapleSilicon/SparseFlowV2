@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SparseFlow V0 reproducible optimization and evidence harness CLI."""
+"""SparseFlow V0 evidence harness and V1 Gate 1 dependency-analysis CLI."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import sys
 from sparseflow.audit import collect_audit_metadata
 from sparseflow.benchmark import run_benchmark
 from sparseflow.config import BenchmarkConfig
-from sparseflow.models import build_reference_model
+from sparseflow.models import build_model
 from sparseflow.passes import ChannelPruningPass, NoOpPass, OptimizationPass
 from sparseflow.presets import (
     ResolvedRunConfiguration,
@@ -28,11 +28,16 @@ from sparseflow.report import (
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "SparseFlow V0: reproducible optimization and evidence harness, "
-            "validated with a deterministic physical channel-pruning demonstration."
+            "SparseFlow V0 evidence harness with ResNet-18 V1 Gate 1 "
+            "dependency analysis and zero-ratio validation."
         )
     )
-    parser.add_argument("--preset", choices=preset_names(), default="micro-demo")
+    parser.add_argument("--preset", choices=preset_names(), default=None)
+    parser.add_argument(
+        "--model",
+        choices=["reference_cnn_v1", "resnet18-reference"],
+        default=None,
+    )
     parser.add_argument(
         "--pass",
         dest="pass_name",
@@ -61,7 +66,11 @@ def _optimization_pass(name: str, ratio: float) -> OptimizationPass:
 
 def resolve_cli_configuration(argv: list[str] | None = None) -> ResolvedRunConfiguration:
     args = _parser().parse_args(argv)
-    preset = get_preset(args.preset)
+    preset_name = args.preset or (
+        "resnet18-gate1" if args.model == "resnet18-reference" else "micro-demo"
+    )
+    preset = get_preset(preset_name)
+    model_identifier = args.model or preset.model_identifier
     pass_name = args.pass_name if args.pass_name is not None else preset.pass_name
     if args.pruning_ratio is not None:
         pruning_ratio = args.pruning_ratio
@@ -71,7 +80,7 @@ def resolve_cli_configuration(argv: list[str] | None = None) -> ResolvedRunConfi
         pruning_ratio = preset.pruning_ratio
     return ResolvedRunConfiguration(
         preset_name=preset.name,
-        model_identifier=preset.model_identifier,
+        model_identifier=model_identifier,
         seed=args.seed if args.seed is not None else preset.seed,
         input_shape=preset.input_shape,
         pass_name=pass_name,
@@ -90,8 +99,6 @@ def resolve_cli_configuration(argv: list[str] | None = None) -> ResolvedRunConfi
 def main(argv: list[str] | None = None) -> int:
     try:
         resolved = resolve_cli_configuration(argv)
-        if resolved.model_identifier != "reference_cnn_v1":
-            raise ValueError(f"unsupported model identifier: {resolved.model_identifier}")
         config = BenchmarkConfig(
             input_shape=resolved.input_shape,
             seed=resolved.seed,
@@ -101,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
             preset_name=resolved.preset_name,
             output_report_filename=resolved.output_path.name,
         )
-        model = build_reference_model(seed=resolved.seed)
+        model = build_model(resolved.model_identifier, seed=resolved.seed)
         optimization_pass = _optimization_pass(resolved.pass_name, resolved.pruning_ratio)
         result = run_benchmark(model, optimization_pass, config)
         audit = collect_audit_metadata(

@@ -20,7 +20,27 @@ def test_noop_control_preset_resolves_expected_configuration():
     assert preset.pass_name == "noop"
     assert preset.pruning_ratio == 0.0
     assert preset.output_report_filename == "report-noop.json"
-    assert preset_names() == ("micro-demo", "noop-control")
+    assert preset_names() == ("micro-demo", "noop-control", "resnet18-gate1")
+
+
+def test_resnet18_gate1_preset_and_model_cli_resolve_without_pruning():
+    preset = get_preset("resnet18-gate1")
+
+    assert preset.model_identifier == "resnet18-reference"
+    assert preset.input_shape == (1, 3, 64, 64)
+    assert preset.pass_name == "channel-prune"
+    assert preset.pruning_ratio == 0.0
+    assert preset.warmup_runs == 1
+    assert preset.measured_runs == 3
+    assert preset.output_report_filename == "report-resnet18-gate1.json"
+
+    resolved = resolve_cli_configuration(
+        ["--model", "resnet18-reference", "--pass", "channel-prune", "--pruning-ratio", "0.0"]
+    )
+    assert resolved.preset_name == "resnet18-gate1"
+    assert resolved.model_identifier == "resnet18-reference"
+    assert resolved.input_shape == (1, 3, 64, 64)
+    assert resolved.pruning_ratio == 0.0
 
 
 def test_explicit_cli_values_override_preset_values():

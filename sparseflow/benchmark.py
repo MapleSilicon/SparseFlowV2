@@ -36,6 +36,7 @@ NOISE_COEFFICIENT_OF_VARIATION_THRESHOLD = 0.10
 @dataclass(frozen=True)
 class BenchmarkResult:
     model_identifier: str
+    architecture_identifier: str
     benchmark_config: dict[str, Any]
     resolved_configuration: dict[str, Any]
     optimization: dict[str, Any]
@@ -136,10 +137,7 @@ def export_onnx(
     }
 
 
-def _latency_samples(
-    onnx_path: Path,
-    config: BenchmarkConfig,
-) -> dict[str, Any]:
+def _create_ort_session(onnx_path: Path, config: BenchmarkConfig) -> ort.InferenceSession:
     options = ort.SessionOptions()
     options.intra_op_num_threads = config.threads
     options.inter_op_num_threads = config.threads
@@ -151,6 +149,56 @@ def _latency_samples(
     )
     if session.get_providers() != ["CPUExecutionProvider"]:
         raise RuntimeError(f"unexpected ONNX Runtime providers: {session.get_providers()}")
+    return session
+
+
+def validate_pytorch_onnx(
+    model: nn.Module,
+    onnx_path: Path,
+    config: BenchmarkConfig,
+) -> dict[str, Any]:
+    """Compare deterministic PyTorch and ONNX Runtime outputs."""
+
+    generator = np.random.default_rng(config.seed)
+    inputs = generator.standard_normal(config.input_shape).astype(np.float32)
+    session = _create_ort_session(onnx_path, config)
+    input_name = session.get_inputs()[0].name
+    with torch.no_grad():
+        pytorch_output = model.eval()(torch.from_numpy(inputs)).detach().cpu().numpy()
+    onnx_output = session.run(None, {input_name: inputs})[0]
+
+    shapes_match = pytorch_output.shape == onnx_output.shape
+    difference = onnx_output - pytorch_output
+    absolute_max = float(np.max(np.abs(difference)))
+    denominator = max(float(np.linalg.norm(pytorch_output)), 1e-12)
+    relative_l2 = float(np.linalg.norm(difference) / denominator)
+    finite = bool(np.isfinite(pytorch_output).all() and np.isfinite(onnx_output).all())
+    absolute_tolerance = 1e-4
+    relative_tolerance = 1e-4
+    return {
+        "provider": "CPUExecutionProvider",
+        "pytorch_output_shape": list(pytorch_output.shape),
+        "onnx_output_shape": list(onnx_output.shape),
+        "output_shape_matches": shapes_match,
+        "absolute_error_max": absolute_max,
+        "relative_l2_error": relative_l2,
+        "absolute_tolerance": absolute_tolerance,
+        "relative_l2_tolerance": relative_tolerance,
+        "outputs_finite": finite,
+        "passed": (
+            shapes_match
+            and finite
+            and absolute_max <= absolute_tolerance
+            and relative_l2 <= relative_tolerance
+        ),
+    }
+
+
+def _latency_samples(
+    onnx_path: Path,
+    config: BenchmarkConfig,
+) -> dict[str, Any]:
+    session = _create_ort_session(onnx_path, config)
 
     generator = np.random.default_rng(config.seed)
     inputs = generator.standard_normal(config.input_shape).astype(np.float32)
@@ -192,6 +240,11 @@ def _measure_model(
         "onnx_sha256": onnx_artifact["sha256"],
         "onnx_validated": onnx_artifact["validated"],
         "onnx_opset": onnx_artifact["opset"],
+        "pytorch_onnx_validation": validate_pytorch_onnx(
+            model,
+            onnx_path,
+            config,
+        ),
     }
     return metrics, artifacts
 
@@ -200,7 +253,7 @@ def _fidelity_proxy(
     baseline: nn.Module,
     optimized: nn.Module,
     config: BenchmarkConfig,
-    pass_name: str,
+    require_equivalence: bool,
 ) -> dict[str, Any]:
     shape = (config.fidelity_batch_size, *config.input_shape[1:])
     generator = torch.Generator().manual_seed(config.seed)
@@ -216,7 +269,7 @@ def _fidelity_proxy(
     relative_l2 = float(torch.linalg.vector_norm(difference).item() / denominator)
     finite = bool(torch.isfinite(expected).all() and torch.isfinite(actual).all())
 
-    if pass_name == "noop":
+    if require_equivalence:
         tolerance: dict[str, float | None] = {
             "absolute_max": 1e-6,
             "relative_l2_max": 1e-5,
@@ -262,6 +315,72 @@ def run_benchmark(
 
     changes = optimization_result.graph_changes
     pass_configuration = optimization_pass.config()
+    fidelity = _fidelity_proxy(
+        baseline,
+        optimized,
+        benchmark_config,
+        require_equivalence=(
+            optimization_pass.name == "noop"
+            or float(pass_configuration.get("ratio", -1.0)) == 0.0
+        ),
+    )
+    baseline_structural_hash = structural_hash(baseline)
+    optimized_structural_hash = structural_hash(optimized)
+    metadata = dict(optimization_result.metadata)
+    if metadata.get("gate") == "resnet18_gate1_dependency_analysis":
+        zero_ratio_checks = {
+            "model_hashes_identical": (
+                baseline_artifacts["model_hash"] == optimized_artifacts["model_hash"]
+            ),
+            "pytorch_artifact_hashes_identical": (
+                baseline_artifacts["pytorch_sha256"]
+                == optimized_artifacts["pytorch_sha256"]
+            ),
+            "onnx_artifact_hashes_identical": (
+                baseline_artifacts["onnx_sha256"]
+                == optimized_artifacts["onnx_sha256"]
+            ),
+            "structural_hashes_identical": (
+                baseline_structural_hash == optimized_structural_hash
+            ),
+            "parameter_counts_identical": (
+                baseline_metrics["parameter_count"] == optimized_metrics["parameter_count"]
+            ),
+            "macs_identical": (
+                baseline_metrics["compute"]["macs"]
+                == optimized_metrics["compute"]["macs"]
+            ),
+            "flops_identical": (
+                baseline_metrics["compute"]["flops"]
+                == optimized_metrics["compute"]["flops"]
+            ),
+            "graph_changes_empty": not changes,
+            "outputs_identical": (
+                fidelity["absolute_error_max"] <= 1e-6
+                and fidelity["relative_l2_error"] <= 1e-5
+            ),
+            "onnx_validation_passed": (
+                baseline_artifacts["onnx_validated"]
+                and optimized_artifacts["onnx_validated"]
+            ),
+            "pytorch_onnx_validation_passed": (
+                baseline_artifacts["pytorch_onnx_validation"]["passed"]
+                and optimized_artifacts["pytorch_onnx_validation"]["passed"]
+            ),
+        }
+        zero_ratio_checks["no_tensors_changed"] = zero_ratio_checks[
+            "model_hashes_identical"
+        ] and zero_ratio_checks["pytorch_artifact_hashes_identical"]
+        zero_ratio_checks["no_channels_removed"] = (
+            zero_ratio_checks["structural_hashes_identical"]
+            and zero_ratio_checks["parameter_counts_identical"]
+        )
+        metadata["zero_ratio_validation"] = {
+            "validation_type": "dependency_analysis_without_transformation",
+            "ratio": 0.0,
+            **zero_ratio_checks,
+            "passed": all(zero_ratio_checks.values()),
+        }
     resolved_configuration = {
         "preset": benchmark_config.preset_name,
         "model_identifier": getattr(model, "identifier", model.__class__.__name__),
@@ -280,12 +399,17 @@ def run_benchmark(
     )
     return BenchmarkResult(
         model_identifier=getattr(model, "identifier", model.__class__.__name__),
+        architecture_identifier=getattr(
+            model,
+            "architecture_identifier",
+            getattr(model, "identifier", model.__class__.__name__),
+        ),
         benchmark_config=benchmark_config.as_dict(),
         resolved_configuration=resolved_configuration,
         optimization={
             "pass_name": optimization_pass.name,
             "config": pass_configuration,
-            "metadata": optimization_result.metadata,
+            "metadata": metadata,
         },
         baseline=baseline_metrics,
         optimized=optimized_metrics,
@@ -300,14 +424,12 @@ def run_benchmark(
             "input_shape": list(benchmark_config.input_shape),
         },
         latency_interpretation=latency_interpretation,
-        fidelity=_fidelity_proxy(
-            baseline, optimized, benchmark_config, optimization_pass.name
-        ),
+        fidelity=fidelity,
         graph={
             "changes": graph_changes_as_dict(changes),
             "graph_diff_hash": graph_changes_hash(changes),
-            "baseline_structural_hash": structural_hash(baseline),
-            "optimized_structural_hash": structural_hash(optimized),
+            "baseline_structural_hash": baseline_structural_hash,
+            "optimized_structural_hash": optimized_structural_hash,
             "baseline_fx_graph": fx_graph_text(baseline),
             "optimized_fx_graph": fx_graph_text(optimized),
         },
