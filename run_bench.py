@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SparseFlow V0 evidence harness and V1 Gate 1 dependency-analysis CLI."""
+"""SparseFlow evidence harness with V1 Gate 1.5 latency calibration."""
 
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ from sparseflow.report import (
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "SparseFlow V0 evidence harness with ResNet-18 V1 Gate 1 "
-            "dependency analysis and zero-ratio validation."
+            "SparseFlow evidence harness with ResNet-18 V1 Gate 1 dependency "
+            "analysis and Gate 1.5 calibrated paired CPU latency measurement."
         )
     )
     parser.add_argument("--preset", choices=preset_names(), default=None)

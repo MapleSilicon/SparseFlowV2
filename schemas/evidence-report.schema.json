@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://maplesilicon.co/schemas/sparseflow/evidence-report-0.3.0.json",
-  "title": "SparseFlow V0 evidence report",
+  "$id": "https://maplesilicon.co/schemas/sparseflow/evidence-report-0.4.0.json",
+  "title": "SparseFlow calibrated evidence report",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "product", "run", "environment", "model", "configuration", "optimization", "metrics", "latency_interpretation", "graph", "artifacts"],
   "properties": {
-    "schema_version": {"const": "0.3.0"},
+    "schema_version": {"enum": ["0.3.0", "0.4.0"]},
     "product": {
       "type": "object",
       "required": ["current_milestone", "positioning", "demonstration_type", "commercial_benchmark"],
@@ -90,6 +90,64 @@
       "required": ["pass_name", "config", "metadata"],
       "properties": {"pass_name": {"type": "string", "minLength": 1}, "config": {"type": "object"}, "metadata": {"type": "object"}}
     },
+    "measurement_recipe": {"$ref": "#/$defs/measurementRecipe"},
+    "latency_calibration": {
+      "type": "object",
+      "required": ["calibration_type", "measurement_recipe_hash", "artifact_identity_verified", "artifact_identity", "pair_repetitions", "measured_runs_per_side", "execution_order", "pairs", "baseline_latency_ms", "comparison_latency_ms", "paired_differences_ms", "paired_improvement_percent", "interval_method", "confidence_level", "null_paired_improvement_percent", "mdi_derivation", "minimum_detectable_improvement_percent"],
+      "properties": {
+        "calibration_type": {"const": "identical_artifact_independent_session_null"},
+        "measurement_recipe_hash": {"$ref": "#/$defs/hash"},
+        "artifact_identity_verified": {"const": true},
+        "artifact_identity": {"$ref": "#/$defs/calibrationIdentity"},
+        "pair_repetitions": {"type": "integer", "minimum": 1},
+        "measured_runs_per_side": {"type": "integer", "minimum": 1},
+        "execution_order": {"$ref": "#/$defs/executionOrder"},
+        "pairs": {"$ref": "#/$defs/pairs"},
+        "baseline_latency_ms": {"$ref": "#/$defs/numericSummary"},
+        "comparison_latency_ms": {"$ref": "#/$defs/numericSummary"},
+        "paired_differences_ms": {"$ref": "#/$defs/numericSummary"},
+        "paired_improvement_percent": {"$ref": "#/$defs/numericSummary"},
+        "interval_method": {"const": "two_sided_empirical_percentile_interval"},
+        "confidence_level": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1},
+        "null_paired_improvement_percent": {"$ref": "#/$defs/numericSummary"},
+        "mdi_derivation": {
+          "type": "object",
+          "required": ["statistic", "lower_percentile_percent", "upper_percentile_percent", "lower_bound_percent", "upper_bound_percent", "value_percent"],
+          "properties": {
+            "statistic": {"type": "string", "minLength": 1},
+            "lower_percentile_percent": {"type": "number"},
+            "upper_percentile_percent": {"type": "number"},
+            "lower_bound_percent": {"type": "number"},
+            "upper_bound_percent": {"type": "number"},
+            "value_percent": {"type": "number", "minimum": 0}
+          }
+        },
+        "minimum_detectable_improvement_percent": {"type": "number", "minimum": 0}
+      }
+    },
+    "environment_drift": {
+      "type": "object",
+      "required": ["diagnostic_only", "used_to_adjust_latency", "calibration", "comparison"],
+      "properties": {
+        "diagnostic_only": {"const": true},
+        "used_to_adjust_latency": {"const": false},
+        "calibration": {"$ref": "#/$defs/environmentPhase"},
+        "comparison": {"$ref": "#/$defs/environmentPhase"}
+      }
+    },
+    "paired_statistics": {
+      "type": "object",
+      "required": ["measurement_recipe_hash", "pair_repetitions", "measured_runs_per_side", "execution_order", "pairs", "paired_differences_ms", "paired_improvement_percent"],
+      "properties": {
+        "measurement_recipe_hash": {"$ref": "#/$defs/hash"},
+        "pair_repetitions": {"type": "integer", "minimum": 1},
+        "measured_runs_per_side": {"type": "integer", "minimum": 1},
+        "execution_order": {"$ref": "#/$defs/executionOrder"},
+        "pairs": {"$ref": "#/$defs/pairs"},
+        "paired_differences_ms": {"$ref": "#/$defs/numericSummary"},
+        "paired_improvement_percent": {"$ref": "#/$defs/numericSummary"}
+      }
+    },
     "metrics": {
       "type": "object",
       "required": ["parameters", "serialized_size_bytes", "latency_ms", "compute", "fidelity"],
@@ -111,9 +169,15 @@
                 "provider": {"const": "CPUExecutionProvider"},
                 "warmup_runs": {"type": "integer", "minimum": 0},
                 "measured_runs": {"type": "integer", "minimum": 1},
+                "pair_repetitions": {"type": "integer", "minimum": 1},
+                "measured_runs_per_side": {"type": "integer", "minimum": 1},
+                "order_policy": {"type": "string", "minLength": 1},
+                "random_seed": {"type": "integer"},
                 "intra_op_threads": {"type": "integer", "minimum": 1},
                 "inter_op_threads": {"type": "integer", "minimum": 1},
-                "clock": {"type": "string", "minLength": 1}
+                "execution_mode": {"type": "string", "minLength": 1},
+                "clock": {"type": "string", "minLength": 1},
+                "input_shape": {"$ref": "#/$defs/inputShape"}
               }
             },
             "baseline": {"$ref": "#/$defs/latency"},
@@ -178,6 +242,15 @@
   "allOf": [
     {
       "if": {
+        "properties": {"schema_version": {"const": "0.4.0"}},
+        "required": ["schema_version"]
+      },
+      "then": {
+        "required": ["measurement_recipe", "latency_calibration", "environment_drift", "paired_statistics"]
+      }
+    },
+    {
+      "if": {
         "properties": {
           "model": {
             "properties": {"identifier": {"const": "resnet18-reference"}},
@@ -216,6 +289,114 @@
   "$defs": {
     "inputShape": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer", "minimum": 1}},
     "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "measurementRecipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["warmup_runs", "pair_repetitions", "measured_runs_per_side", "provider", "timer", "random_seed", "order_policy", "input_shape", "intra_op_threads", "inter_op_threads", "benchmark_mode", "recipe_hash"],
+      "properties": {
+        "warmup_runs": {"type": "integer", "minimum": 0},
+        "pair_repetitions": {"type": "integer", "minimum": 1},
+        "measured_runs_per_side": {"type": "integer", "minimum": 1},
+        "provider": {"type": "string", "minLength": 1},
+        "timer": {"type": "string", "minLength": 1},
+        "random_seed": {"type": "integer"},
+        "order_policy": {"type": "string", "minLength": 1},
+        "input_shape": {"$ref": "#/$defs/inputShape"},
+        "intra_op_threads": {"type": "integer", "minimum": 1},
+        "inter_op_threads": {"type": "integer", "minimum": 1},
+        "benchmark_mode": {"type": "string", "minLength": 1},
+        "recipe_hash": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "calibrationIdentity": {
+      "type": "object",
+      "required": ["verified", "baseline", "comparison"],
+      "properties": {
+        "verified": {"const": true},
+        "baseline": {"$ref": "#/$defs/artifactIdentity"},
+        "comparison": {"$ref": "#/$defs/artifactIdentity"}
+      }
+    },
+    "artifactIdentity": {
+      "type": "object",
+      "required": ["model_hash", "pytorch_sha256", "onnx_sha256", "graph_hash"],
+      "properties": {
+        "model_hash": {"$ref": "#/$defs/hash"},
+        "pytorch_sha256": {"$ref": "#/$defs/hash"},
+        "onnx_sha256": {"$ref": "#/$defs/hash"},
+        "graph_hash": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "executionOrder": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"enum": ["baseline_then_comparison", "comparison_then_baseline"]}
+    },
+    "pairs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["pair_index", "execution_order", "baseline_samples_ms", "comparison_samples_ms", "baseline_mean_ms", "comparison_mean_ms", "difference_ms", "improvement_percent"],
+        "properties": {
+          "pair_index": {"type": "integer", "minimum": 0},
+          "execution_order": {"enum": ["baseline_then_comparison", "comparison_then_baseline"]},
+          "baseline_samples_ms": {"type": "array", "minItems": 1, "items": {"type": "number", "exclusiveMinimum": 0}},
+          "comparison_samples_ms": {"type": "array", "minItems": 1, "items": {"type": "number", "exclusiveMinimum": 0}},
+          "baseline_mean_ms": {"type": "number", "exclusiveMinimum": 0},
+          "comparison_mean_ms": {"type": "number", "exclusiveMinimum": 0},
+          "difference_ms": {"type": "number"},
+          "improvement_percent": {"type": "number"}
+        }
+      }
+    },
+    "numericSummary": {
+      "type": "object",
+      "required": ["samples", "samples_sha256", "p50", "median", "p95", "minimum", "maximum", "mean", "standard_deviation", "coefficient_of_variation"],
+      "properties": {
+        "samples": {"type": "array", "minItems": 1, "items": {"type": "number"}},
+        "samples_sha256": {"$ref": "#/$defs/hash"},
+        "p50": {"type": "number"},
+        "median": {"type": "number"},
+        "p95": {"type": "number"},
+        "minimum": {"type": "number"},
+        "maximum": {"type": "number"},
+        "mean": {"type": "number"},
+        "standard_deviation": {"type": "number", "minimum": 0},
+        "coefficient_of_variation": {"type": "number", "minimum": 0}
+      }
+    },
+    "environmentPhase": {
+      "type": "object",
+      "required": ["diagnostic_only", "used_to_adjust_latency", "snapshots"],
+      "properties": {
+        "diagnostic_only": {"const": true},
+        "used_to_adjust_latency": {"const": false},
+        "snapshots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["timestamp_utc", "execution_order"],
+            "properties": {
+              "timestamp_utc": {"type": "string", "format": "date-time"},
+              "execution_order": {"type": "string", "minLength": 1},
+              "process_cpu_utilization_percent": {"$ref": "#/$defs/telemetryReading"},
+              "total_cpu_utilization_percent": {"$ref": "#/$defs/telemetryReading"},
+              "available_memory_bytes": {"$ref": "#/$defs/telemetryReading"},
+              "cpu_frequency_mhz": {"$ref": "#/$defs/telemetryReading"}
+            }
+          }
+        }
+      }
+    },
+    "telemetryReading": {
+      "type": "object",
+      "required": ["value", "available"],
+      "properties": {
+        "value": {"type": ["number", "null"]},
+        "available": {"type": "boolean"}
+      }
+    },
     "comparison": {
       "type": "object",
       "required": ["baseline", "optimized", "reduction_percent"],

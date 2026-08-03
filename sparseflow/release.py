@@ -12,6 +12,7 @@ from typing import Iterable
 
 from sparseflow.report import (
     SCHEMA_VERSION,
+    SUPPORTED_SCHEMA_VERSIONS,
     V0_POSITIONING,
     EvidenceValidationError,
     validate_evidence_report,
@@ -162,7 +163,11 @@ def run_release_checks(repo_path: str | Path, require_clean: bool = True) -> lis
     )
 
     schema = _read_json(repo / "schemas" / "evidence-report.schema.json")
-    schema_matches = schema.get("properties", {}).get("schema_version", {}).get("const") == SCHEMA_VERSION
+    schema_versions = schema.get("properties", {}).get("schema_version", {}).get("enum", [])
+    schema_matches = (
+        SCHEMA_VERSION in schema_versions
+        and all(version in schema_versions for version in SUPPORTED_SCHEMA_VERSIONS)
+    )
     results.append(
         _result(
             "schema version",
@@ -198,8 +203,8 @@ def run_release_checks(repo_path: str | Path, require_clean: bool = True) -> lis
             commit_exists = _git(repo, "cat-file", "-e", f"{commit_hash}^{{commit}}").returncode == 0
             if not commit_hash or not commit_exists:
                 report_errors.append(f"{filename}: commit hash is missing or unknown")
-            if report["schema_version"] != SCHEMA_VERSION:
-                report_errors.append(f"{filename}: schema version mismatch")
+            if report["schema_version"] not in SUPPORTED_SCHEMA_VERSIONS:
+                report_errors.append(f"{filename}: unsupported schema version")
             product = report.get("product", {})
             if product.get("demonstration_type") != "physical_channel_pruning_mechanism_demonstration":
                 report_errors.append(f"{filename}: mechanism demonstration label is missing")

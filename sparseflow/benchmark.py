@@ -6,7 +6,6 @@ from dataclasses import dataclass
 import io
 from pathlib import Path
 import tempfile
-import time
 from typing import Any
 
 import numpy as np
@@ -25,8 +24,15 @@ from sparseflow.graph_diff import (
     model_state_hash,
     structural_hash,
 )
+from sparseflow.measurement import (
+    MeasurementRecipe,
+    derive_minimum_detectable_improvement,
+    run_paired_onnx_benchmark,
+    summarize_numeric_samples,
+    validate_calibration_identity,
+)
 from sparseflow.passes import OptimizationPass
-from sparseflow.serialization import sha256_bytes, sha256_file, sha256_json
+from sparseflow.serialization import sha256_bytes, sha256_file
 
 
 MICROBENCHMARK_P50_THRESHOLD_MS = 0.1
@@ -43,6 +49,10 @@ class BenchmarkResult:
     baseline: dict[str, Any]
     optimized: dict[str, Any]
     latency_methodology: dict[str, Any]
+    measurement_recipe: dict[str, Any]
+    latency_calibration: dict[str, Any]
+    environment_drift: dict[str, Any]
+    paired_statistics: dict[str, Any]
     latency_interpretation: dict[str, Any]
     fidelity: dict[str, Any]
     graph: dict[str, Any]
@@ -64,31 +74,14 @@ def serialize_state_dict(model: nn.Module) -> bytes:
 
 
 def summarize_latency_samples(samples: list[float]) -> dict[str, Any]:
-    if not samples:
-        raise ValueError("at least one latency sample is required")
-    values = np.asarray(samples, dtype=np.float64)
-    if not np.isfinite(values).all() or np.any(values < 0):
-        raise ValueError("latency samples must be finite and non-negative")
-    mean = float(values.mean())
-    standard_deviation = float(values.std(ddof=0))
-    coefficient_of_variation = standard_deviation / mean if mean > 0 else 0.0
-    normalized_samples = [float(value) for value in values]
-    return {
-        "samples": normalized_samples,
-        "samples_sha256": sha256_json(normalized_samples),
-        "p50": float(np.percentile(values, 50)),
-        "p95": float(np.percentile(values, 95)),
-        "minimum": float(values.min()),
-        "maximum": float(values.max()),
-        "mean": mean,
-        "standard_deviation": standard_deviation,
-        "coefficient_of_variation": float(coefficient_of_variation),
-    }
+    return summarize_numeric_samples(samples, require_non_negative=True)
 
 
 def interpret_latency(
     baseline: dict[str, Any],
     optimized: dict[str, Any],
+    paired_improvement: dict[str, Any] | None = None,
+    minimum_detectable_improvement_percent: float | None = None,
 ) -> dict[str, Any]:
     reasons: list[str] = []
     if baseline["p50"] < MICROBENCHMARK_P50_THRESHOLD_MS:
@@ -97,13 +90,37 @@ def interpret_latency(
         reasons.append("baseline coefficient of variation exceeds 0.10")
     if optimized["coefficient_of_variation"] > NOISE_COEFFICIENT_OF_VARIATION_THRESHOLD:
         reasons.append("optimized coefficient of variation exceeds 0.10")
+    observed_improvement = (
+        float(paired_improvement["median"])
+        if paired_improvement is not None
+        else None
+    )
+    exceeds_mdi = (
+        observed_improvement is not None
+        and minimum_detectable_improvement_percent is not None
+        and observed_improvement > minimum_detectable_improvement_percent
+    )
+    if (
+        observed_improvement is not None
+        and minimum_detectable_improvement_percent is not None
+        and not exceeds_mdi
+    ):
+        reasons.append(
+            "observed paired median improvement does not exceed calibrated MDI"
+        )
     return {
         "noise_sensitive": bool(reasons),
         "reasons": reasons,
+        "observed_paired_median_improvement_percent": observed_improvement,
+        "minimum_detectable_improvement_percent": (
+            minimum_detectable_improvement_percent
+        ),
+        "improvement_exceeds_calibrated_mdi": exceeds_mdi,
         "commercial_speedup_claim_supported": False,
         "policy": (
-            "SparseFlow V0 does not infer commercial speedup from structural "
-            "reductions or a single latency run."
+            "SparseFlow does not report latency improvements below the calibrated "
+            "minimum detectable improvement. Structural reductions do not establish "
+            "a commercial speedup claim."
         ),
     }
 
@@ -194,35 +211,12 @@ def validate_pytorch_onnx(
     }
 
 
-def _latency_samples(
-    onnx_path: Path,
-    config: BenchmarkConfig,
-) -> dict[str, Any]:
-    session = _create_ort_session(onnx_path, config)
-
-    generator = np.random.default_rng(config.seed)
-    inputs = generator.standard_normal(config.input_shape).astype(np.float32)
-    input_name = session.get_inputs()[0].name
-    feed = {input_name: inputs}
-
-    for _ in range(config.warmup_runs):
-        session.run(None, feed)
-
-    samples: list[float] = []
-    for _ in range(config.measured_runs):
-        started = time.perf_counter_ns()
-        session.run(None, feed)
-        samples.append((time.perf_counter_ns() - started) / 1_000_000.0)
-
-    return summarize_latency_samples(samples)
-
-
 def _measure_model(
     model: nn.Module,
     tag: str,
     directory: Path,
     config: BenchmarkConfig,
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any], Path]:
     state_payload = serialize_state_dict(model)
     onnx_path = directory / f"{tag}.onnx"
     onnx_artifact = export_onnx(model, config.input_shape, onnx_path, config.onnx_opset)
@@ -231,7 +225,6 @@ def _measure_model(
         "trainable_parameter_count": count_trainable_parameters(model),
         "pytorch_serialized_size_bytes": len(state_payload),
         "onnx_serialized_size_bytes": onnx_artifact["size_bytes"],
-        "latency_ms": _latency_samples(onnx_path, config),
         "compute": count_compute(model, config.input_shape),
     }
     artifacts = {
@@ -246,7 +239,23 @@ def _measure_model(
             config,
         ),
     }
-    return metrics, artifacts
+    return metrics, artifacts, onnx_path
+
+
+def _measurement_recipe(config: BenchmarkConfig) -> MeasurementRecipe:
+    return MeasurementRecipe(
+        warmup_runs=config.warmup_runs,
+        pair_repetitions=config.measured_runs,
+        measured_runs_per_side=1,
+        provider="CPUExecutionProvider",
+        timer="time.perf_counter_ns",
+        random_seed=config.seed,
+        order_policy="seeded_randomized_pair_order",
+        input_shape=config.input_shape,
+        intra_op_threads=config.threads,
+        inter_op_threads=config.threads,
+        benchmark_mode="ORT_SEQUENTIAL",
+    )
 
 
 def _fidelity_proxy(
@@ -303,15 +312,78 @@ def run_benchmark(
     baseline = model.eval()
     optimization_result = optimization_pass.apply(baseline)
     optimized = optimization_result.model.eval()
+    baseline_structural_hash = structural_hash(baseline)
+    optimized_structural_hash = structural_hash(optimized)
+    recipe = _measurement_recipe(benchmark_config)
 
     with tempfile.TemporaryDirectory(prefix="sparseflow-benchmark-") as temporary_directory:
         directory = Path(temporary_directory)
-        baseline_metrics, baseline_artifacts = _measure_model(
+        baseline_metrics, baseline_artifacts, baseline_onnx_path = _measure_model(
             baseline, "baseline", directory, benchmark_config
         )
-        optimized_metrics, optimized_artifacts = _measure_model(
+        optimized_metrics, optimized_artifacts, optimized_onnx_path = _measure_model(
             optimized, "optimized", directory, benchmark_config
         )
+        calibration_identity = validate_calibration_identity(
+            baseline_artifacts,
+            baseline_artifacts,
+            baseline_structural_hash,
+            baseline_structural_hash,
+        )
+        calibration_measurement = run_paired_onnx_benchmark(
+            baseline_onnx_path,
+            baseline_onnx_path,
+            recipe,
+            recipe,
+        )
+        paired_measurement = run_paired_onnx_benchmark(
+            baseline_onnx_path,
+            optimized_onnx_path,
+            recipe,
+            recipe,
+        )
+
+    baseline_metrics["latency_ms"] = paired_measurement["baseline"]
+    optimized_metrics["latency_ms"] = paired_measurement["comparison"]
+    calibration_derivation = derive_minimum_detectable_improvement(
+        calibration_measurement["paired_improvement_percent"]["samples"]
+    )
+    latency_calibration = {
+        "calibration_type": "identical_artifact_independent_session_null",
+        "measurement_recipe_hash": recipe.recipe_hash,
+        "artifact_identity_verified": True,
+        "artifact_identity": calibration_identity,
+        "pair_repetitions": recipe.pair_repetitions,
+        "measured_runs_per_side": recipe.measured_runs_per_side,
+        "execution_order": calibration_measurement["execution_order"],
+        "pairs": calibration_measurement["pairs"],
+        "baseline_latency_ms": calibration_measurement["baseline"],
+        "comparison_latency_ms": calibration_measurement["comparison"],
+        "paired_differences_ms": calibration_measurement[
+            "paired_differences_ms"
+        ],
+        "paired_improvement_percent": calibration_measurement[
+            "paired_improvement_percent"
+        ],
+        **calibration_derivation,
+    }
+    paired_statistics = {
+        "measurement_recipe_hash": recipe.recipe_hash,
+        "pair_repetitions": recipe.pair_repetitions,
+        "measured_runs_per_side": recipe.measured_runs_per_side,
+        "execution_order": paired_measurement["execution_order"],
+        "pairs": paired_measurement["pairs"],
+        "paired_differences_ms": paired_measurement["paired_differences_ms"],
+        "paired_improvement_percent": paired_measurement[
+            "paired_improvement_percent"
+        ],
+    }
+    environment_drift = {
+        "diagnostic_only": True,
+        "used_to_adjust_latency": False,
+        "calibration": calibration_measurement["environment_drift"],
+        "comparison": paired_measurement["environment_drift"],
+    }
 
     changes = optimization_result.graph_changes
     pass_configuration = optimization_pass.config()
@@ -324,8 +396,6 @@ def run_benchmark(
             or float(pass_configuration.get("ratio", -1.0)) == 0.0
         ),
     )
-    baseline_structural_hash = structural_hash(baseline)
-    optimized_structural_hash = structural_hash(optimized)
     metadata = dict(optimization_result.metadata)
     if metadata.get("gate") == "resnet18_gate1_dependency_analysis":
         zero_ratio_checks = {
@@ -395,7 +465,10 @@ def run_benchmark(
         "output_report_filename": benchmark_config.output_report_filename,
     }
     latency_interpretation = interpret_latency(
-        baseline_metrics["latency_ms"], optimized_metrics["latency_ms"]
+        baseline_metrics["latency_ms"],
+        optimized_metrics["latency_ms"],
+        paired_statistics["paired_improvement_percent"],
+        latency_calibration["minimum_detectable_improvement_percent"],
     )
     return BenchmarkResult(
         model_identifier=getattr(model, "identifier", model.__class__.__name__),
@@ -417,12 +490,20 @@ def run_benchmark(
             "provider": "CPUExecutionProvider",
             "warmup_runs": benchmark_config.warmup_runs,
             "measured_runs": benchmark_config.measured_runs,
+            "pair_repetitions": recipe.pair_repetitions,
+            "measured_runs_per_side": recipe.measured_runs_per_side,
+            "order_policy": recipe.order_policy,
+            "random_seed": recipe.random_seed,
             "intra_op_threads": benchmark_config.threads,
             "inter_op_threads": benchmark_config.threads,
             "execution_mode": "ORT_SEQUENTIAL",
             "clock": "time.perf_counter_ns",
             "input_shape": list(benchmark_config.input_shape),
         },
+        measurement_recipe=recipe.as_dict(),
+        latency_calibration=latency_calibration,
+        environment_drift=environment_drift,
+        paired_statistics=paired_statistics,
         latency_interpretation=latency_interpretation,
         fidelity=fidelity,
         graph={

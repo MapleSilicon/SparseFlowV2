@@ -10,7 +10,7 @@ SparseFlow V1: ResNet-18 dependency-aware physical channel pruning, ONNX Runtime
 
 Full V1 remains the next milestone. See [docs/resnet18-v1-plan.md](docs/resnet18-v1-plan.md).
 
-Development status: **SparseFlow V1 Gate 1 is implemented on the `feat/resnet18-v1` branch.** Gate 1 adds deterministic local ResNet-18 construction, complete residual dependency analysis, zero-ratio equivalence validation, ONNX export, and ONNX Runtime CPU execution. It performs no ResNet channel removal.
+Development status: **SparseFlow V1 Gate 1.5 is implemented on the `feat/resnet18-v1` branch.** Gate 1 adds deterministic local ResNet-18 construction, complete residual dependency analysis, zero-ratio equivalence validation, ONNX export, and ONNX Runtime CPU execution. Gate 1.5 adds calibrated paired latency measurement and evidence-integrity rules. Neither gate performs ResNet channel removal.
 
 ## What SparseFlow V0 does
 
@@ -19,6 +19,7 @@ Development status: **SparseFlow V1 Gate 1 is implemented on the `feat/resnet18-
 - Provides a NoOp control with identical structure, parameters, compute counts, and structural hashes.
 - Exports baseline and optimized models to ONNX and validates them with the ONNX checker.
 - Executes both artifacts with ONNX Runtime `CPUExecutionProvider`.
+- Measures latency in deterministic seeded A/B pairs and calibrates measurement noise with independently loaded identical artifacts.
 - Records parameters, serialized sizes, MACs, FLOPs, latency distributions, fidelity proxy results, semantic graph changes, hashes, environment details, Git state, and resolved configuration.
 - Validates every official report against the checked-in schema before an atomic write.
 
@@ -50,11 +51,11 @@ python scripts/check_release.py
 
 ## Benchmark presets
 
-`micro-demo` selects `reference_cnn_v1`, seed `1234`, input shape `[1, 3, 16, 16]`, the `channel-prune` pass at ratio `0.375`, five warmups, 30 measured runs, and `report.json`.
+`micro-demo` selects `reference_cnn_v1`, seed `1234`, input shape `[1, 3, 16, 16]`, the `channel-prune` pass at ratio `0.375`, five warmups, 30 randomized measurement pairs, and `report.json`.
 
 `noop-control` uses the same deterministic model and measurement settings with the `noop` pass, ratio `0.0`, and `report-noop.json`.
 
-`resnet18-gate1` selects the local untrained `resnet18-reference`, input shape `[1, 3, 64, 64]`, the `channel-prune` pass at ratio `0.0`, one warmup, three measured runs, and `report-resnet18-gate1.json`. Despite the pass name, Gate 1 only analyzes dependencies and validates structural neutrality; it does not prune.
+`resnet18-gate1` selects the local untrained `resnet18-reference`, input shape `[1, 3, 64, 64]`, the `channel-prune` pass at ratio `0.0`, one warmup, three randomized measurement pairs, and `report-resnet18-gate1.json`. Despite the pass name, Gate 1 only analyzes dependencies and validates structural neutrality; it does not prune.
 
 Explicit command-line values override preset values:
 
@@ -70,9 +71,19 @@ The equivalent direct Gate 1 command is:
 python run_bench.py --model resnet18-reference --pass channel-prune --pruning-ratio 0.0
 ```
 
+## Latency Calibration
+
+Gate 1.5 replaces sequential baseline-then-comparison timing with deterministic randomized pairs. For every pair, the seeded order policy chooses baseline then comparison or comparison then baseline, times one invocation per side, and records the order, raw samples, paired difference, and paired improvement percentage. The complete measurement recipe records warmups, pair count, runs per side, provider, timer, seed, order policy, input shape, thread counts, and benchmark mode. Its SHA-256 hash is deterministic for identical recipe values.
+
+Before comparing different artifacts, SparseFlow calibrates the harness by loading the exact same ONNX artifact into two independent ONNX Runtime sessions. Calibration is accepted only when model, PyTorch, ONNX, and structural graph hashes are identical. The paired improvement values from this identical-artifact null distribution produce a two-sided empirical percentile interval. The minimum detectable improvement (MDI) is derived as the maximum absolute interval bound; the confidence level, interval bounds, statistic, null samples, and final value are all stored in the report.
+
+SparseFlow does not report latency improvements below the calibrated minimum detectable improvement.
+
+Provider, timer, warmup, pair count, runs per side, seed, order policy, input shape, thread, benchmark-mode, recipe-hash, or calibration-identity mismatches fail closed before report emission. CPU, memory, and frequency telemetry is diagnostic only and never adjusts latency values. Unavailable telemetry is stored as `null` with `available: false` when a reading is attempted; reports remain valid when optional telemetry fields cannot be collected.
+
 ## Evidence report
 
-Schema `0.3.0` adds explicit product positioning, resolved configuration, full latency summary statistics, and latency interpretation. `metrics.latency_ms` retains every sample plus a deterministic sample hash, p50, p95, minimum, maximum, arithmetic mean, population standard deviation, and coefficient of variation. It also records warmup and measured counts, provider, clock, and ONNX Runtime intra-op and inter-op thread counts.
+Schema `0.4.0` adds `measurement_recipe`, `latency_calibration`, `environment_drift`, and `paired_statistics`. The validator remains backward-compatible with curated `0.3.0` reports. `metrics.latency_ms` retains every sample plus a deterministic sample hash, p50, p95, minimum, maximum, arithmetic mean, population standard deviation, and coefficient of variation. It also records warmup and pair counts, provider, clock, seeded order policy, input shape, benchmark mode, and ONNX Runtime intra-op and inter-op thread counts.
 
 `latency_interpretation.commercial_speedup_claim_supported` is false by policy in V0. A report is marked noise-sensitive when baseline p50 is below `0.1 ms` or either latency distribution has a coefficient of variation above `0.10`.
 
@@ -97,6 +108,8 @@ Ordinary root `report*.json`, ONNX files, and artifact directories are generated
 - `sparseflow/dependencies.py`: JSON-serializable ResNet-18 dependency nodes, edges, residual groups, channel constraints, and classifier dependency.
 - `sparseflow/passes.py`: NoOp and supported physical channel-pruning transformations.
 - `sparseflow/benchmark.py`: ONNX export, CPU timing, structural/runtime metrics, fidelity proxy, and hashes.
+- `sparseflow/measurement.py`: immutable recipes, paired execution, identical-artifact calibration, telemetry, and MDI derivation.
+- `sparseflow/planning.py`: immutable serializable pruning-plan contracts for future Gate 2 work; no execution or mutation.
 - `sparseflow/audit.py`: machine, software, process, repository, and Git metadata.
 - `sparseflow/report.py`: evidence assembly, schema validation, and atomic output.
 - `schemas/evidence-report.schema.json`: official report contract.
@@ -104,7 +117,7 @@ Ordinary root `report*.json`, ONNX files, and artifact directories are generated
 
 ## Current limitations
 
-The V0 pruning pass handles only the bundled micro-model's linear dense dependency pattern. Gate 1 understands ResNet-18 residual additions and identity/projection dependencies but does not modify them. It does not repair channels after a ResNet transformation, prune grouped or depthwise convolutions, or alter the classifier. Fidelity is a deterministic random-input output proxy, not task accuracy. Latency comes from one local CPU process and is not a production workload result.
+The V0 pruning pass handles only the bundled micro-model's linear dense dependency pattern. Gate 1 understands ResNet-18 residual additions and identity/projection dependencies but does not modify them. Gate 1.5 calibrates one local CPU process; it does not make that process a production workload or establish a commercial speedup. It does not repair channels after a ResNet transformation, prune grouped or depthwise convolutions, or alter the classifier. Fidelity is a deterministic random-input output proxy, not task accuracy.
 
 ## V1 roadmap
 
