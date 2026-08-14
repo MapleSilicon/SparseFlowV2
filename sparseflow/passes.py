@@ -11,6 +11,8 @@ import torch
 import torch.fx as fx
 import torch.nn as nn
 
+from sparseflow.dependencies import analyze_resnet18_dependencies
+
 
 @dataclass(frozen=True)
 class GraphChange:
@@ -188,6 +190,25 @@ class ChannelPruningPass(OptimizationPass):
         return features, graph_nodes
 
     def apply(self, model: nn.Module) -> OptimizationResult:
+        if getattr(model, "identifier", None) == "resnet18-reference":
+            if self._ratio != 0.0:
+                raise ValueError(
+                    "SparseFlow V1 Gate 1 supports ResNet-18 ratio 0.0 only; "
+                    "physical pruning is Gate 2 work"
+                )
+            dependency_graph = analyze_resnet18_dependencies(model)
+            return OptimizationResult(
+                model=copy.deepcopy(model).eval(),
+                metadata={
+                    "gate": "resnet18_gate1_dependency_analysis",
+                    "transformation": "none",
+                    "scope": "ResNet-18 dependency analysis and zero-ratio validation",
+                    "dependency_summary": dependency_graph.summary(),
+                    "dependency_analysis": dependency_graph.as_dict(),
+                },
+                graph_changes=[],
+            )
+
         optimized = copy.deepcopy(model).eval()
         features, graph_nodes = self._validate_model(optimized)
         conv_positions = [

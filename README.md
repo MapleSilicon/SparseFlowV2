@@ -1,123 +1,163 @@
 # SparseFlow
 
-## Current status: V0
+## Current status: v0.2 complete; v0.3 Gate A in development
 
 SparseFlow V0: reproducible optimization and evidence harness, validated with a deterministic physical channel-pruning demonstration.
 
-The repository is a small, offline-verifiable reference implementation. It uses a bundled untrained CNN to exercise physical model transformation, deployment export, measurement, provenance capture, and schema-validated evidence. It is not a commercial benchmark.
+SparseFlow **v0.2** extends that evidence-first workflow with transactional, dependency-aware physical channel pruning for the repository's local untrained ResNet-18 reference architecture. It remains an engineering/mechanism milestone, not a commercial benchmark or task-accuracy result.
 
-SparseFlow V1: ResNet-18 dependency-aware physical channel pruning, ONNX Runtime CPU deployment, and measured accuracy/latency evidence on a real evaluation workload.
+The current implementation deliberately separates five claims:
 
-V1 is the next milestone, not current functionality. See [docs/resnet18-v1-plan.md](docs/resnet18-v1-plan.md).
+1. **V0 mechanism evidence:** physical channel removal on the bundled micro-model.
+2. **Gate 1:** deterministic ResNet-18 dependency analysis and zero-ratio structural neutrality.
+3. **Gate 1.5:** calibrated randomized paired CPU latency measurement with a recipe hash and minimum detectable improvement (MDI).
+4. **Gate 2 / v0.2:** validated pruning plan → mutation of a deep copy → executed-plan validation → ONNX/ORT evidence.
+5. **v0.3 Gate A steps 1–4:** official torchvision ResNet-18 pretrained-weight import and semantic-equivalence validation before any task-accuracy evaluation.
 
-## What SparseFlow V0 does
+## v0.3 Gate A — pretrained import checkpoint
 
-- Builds the bundled `reference_cnn_v1` model deterministically without network access.
-- Applies deterministic L1-ranked physical channel pruning to its supported sequential `Conv2d`-`BatchNorm2d`-`Conv2d` dependency chain.
-- Provides a NoOp control with identical structure, parameters, compute counts, and structural hashes.
-- Exports baseline and optimized models to ONNX and validates them with the ONNX checker.
-- Executes both artifacts with ONNX Runtime `CPUExecutionProvider`.
-- Records parameters, serialized sizes, MACs, FLOPs, latency distributions, fidelity proxy results, semantic graph changes, hashes, environment details, Git state, and resolved configuration.
-- Validates every official report against the checked-in schema before an atomic write.
+Gate A is deliberately layered from cheapest/most-isolating to dataset-dependent validation:
 
-## What it proves
+1. **State-dict mapping:** exact torchvision/SparseFlow key order and tensor-shape equality; strict import only.
+2. **Module-configuration equivalence:** Conv2d, BatchNorm2d, pooling, classifier, projection/downsample topology, and ReLU placement/type are compared. SparseFlow's `inplace=False` ReLU storage policy is intentionally allowed against torchvision's `inplace=True` because placement/type and numerical behavior are the relevant semantic contract.
+3. **Per-stage equivalence:** with both models explicitly in eval mode and gradients disabled, deterministic 224×224 float32 inputs are compared at the stem/maxpool boundary and `layer1` through `layer4`.
+4. **Final-logit equivalence:** measured max absolute/relative error, configured `atol`/`rtol`, and argmax agreement are recorded. A mismatch fails closed; tolerances are never auto-widened.
+5. **Dataset/manifest validation:** not implemented until ImageNet-1K validation data is available.
+6. **Full ImageNet baseline reproduction:** not implemented until step 5 is available.
+7. **Published top-1/top-5 gate:** not implemented until step 6 is available.
 
-For the bundled micro-model, V0 proves that the supported pruning pass physically removes channels and repairs the directly dependent dense layers while preserving runnable PyTorch and ONNX models. The reference result reduces parameters from 5,068 to 2,962 (41.55%) and MACs/FLOPs by 46.85%.
+The pinned pretrained reference is `torchvision.models.ResNet18_Weights.IMAGENET1K_V1`. The evidence records the exact torchvision version, enum, resolved weight URL, checkpoint filename, checkpoint SHA-256 when present, imported state-dict SHA-256, and the published ImageNet-1K reference metrics (69.758% top-1 / 89.078% top-5). Dataset-independent steps 1–4 can therefore land and remain auditable before ImageNet data logistics are solved.
 
-It also proves that the harness can produce deterministic structural evidence: model hashes, semantic graph-diff hashes, parameter counts, compute counts, pass configuration, and NoOp neutrality reproduce for identical inputs and code.
+Run the import checkpoint with:
 
-## What it does not prove
+```powershell
+python scripts/check_pretrained_import.py --output report-pretrained-import.json
+```
 
-V0 does not prove production speedup, commercial cost savings, task accuracy, or suitability for arbitrary networks. The bundled model is untrained and extremely small, so its latency is noise-sensitive and may improve or regress between runs. Parameter reduction is not the same as compute reduction, and compute reduction is not the same as latency reduction.
+A successful steps 1–4 checkpoint does **not** authorize a task-accuracy or pruning-quality claim. v0.3 optimization evidence remains blocked until baseline ImageNet evaluation reproduces the pinned reference within a declared tolerance.
 
-V0 is not a production inference optimizer, a general dependency-aware pruning framework, a ResNet-18 implementation, a quantization framework, or a commercial performance benchmark.
+## v0.2 Gate 2
+
+Gate 2 supports only `resnet18-reference`. The policy is intentionally conservative:
+
+- L1 weight-magnitude ranking with deterministic channel-index tie breaking.
+- One canonical kept-channel set for each residual stage width.
+- Identity and projection paths share the same canonical stage channel identity.
+- Internal BasicBlock `conv1` channels may use their own deterministic ranking and are repaired into `conv2` inputs.
+- Projection convolutions and BatchNorm modules are repaired together with the main branch.
+- The final classifier input dimension follows the retained stage-4 channels; its 1000 output classes are never pruned.
+- Supported Gate 2 ratio range is `(0.0, 0.5]`; the release preset uses `0.125`.
+
+The mutation path is transactional. SparseFlow validates the complete immutable plan before mutation, deep-copies the original model, performs physical tensor surgery on the copy, executes the candidate, and independently verifies every planned module dimension. Failed validation does not intentionally mutate the original model or emit official evidence.
+
+The official Gate 2 evidence boundary independently recomputes the pruning-plan hash, residual member channel identity, and plan-versus-execution channel-index agreement. A Boolean asserted by the optimization pass is not sufficient evidence by itself.
+
+## What v0.2 does not prove
+
+SparseFlow v0.2 does **not** establish task accuracy, accuracy recovery after pruning, production latency improvement, commercial cost savings, or generalized architecture support. The ResNet-18 reference model is local and untrained. Fidelity remains a deterministic random-input proxy, not task accuracy.
+
+SparseFlow v0.2 does not implement 2:4 structured sparsity, CUDA or GPU kernels, A100 acceleration, MLIR compilation, quantization, model training, fine-tuning, or online dataset acquisition.
 
 ## Quick start
 
-The benchmark downloads neither weights nor datasets. From PowerShell:
+From PowerShell:
 
 ```powershell
 cd "C:\Users\15879\Downloads\sparseflow-v1"
 python -m pip install -r requirements.txt
+python -m pip install -e .
 python -m pytest -q
-python run_bench.py --preset micro-demo
 python run_bench.py --preset noop-control
-python scripts/check_release.py
+python run_bench.py --preset micro-demo
+python run_bench.py --preset resnet18-gate1
+python run_bench.py --preset resnet18-gate2
+python scripts/check_pretrained_import.py --output report-pretrained-import.json
+python scripts/check_release.py --allow-dirty
 ```
+
+Direct Gate 2 invocation:
+
+```powershell
+python run_bench.py --model resnet18-reference --pass channel-prune --pruning-ratio 0.125 --output report-resnet18-gate2.json
+```
+
+Explicit CLI values override preset values and the resolved configuration is written into the evidence report.
 
 ## Benchmark presets
 
-`micro-demo` selects `reference_cnn_v1`, seed `1234`, input shape `[1, 3, 16, 16]`, the `channel-prune` pass at ratio `0.375`, five warmups, 30 measured runs, and `report.json`.
+- `micro-demo`: bundled micro-model, ratio `0.375`, V0 physical-pruning mechanism evidence.
+- `noop-control`: structural NoOp control.
+- `resnet18-gate1`: local ResNet-18, ratio `0.0`, dependency analysis and neutrality evidence.
+- `resnet18-gate2`: local ResNet-18, ratio `0.125`, transactional physical channel pruning.
 
-`noop-control` uses the same deterministic model and measurement settings with the `noop` pass, ratio `0.0`, and `report-noop.json`.
+The ResNet benchmark presets use input shape `[1, 3, 64, 64]`. MAC/FLOP values from these runs must not be compared directly with published 224×224 ResNet-18 figures. Gate A semantic equivalence uses deterministic `[B, 3, 224, 224]` inputs because it validates the pretrained reference architecture at its standard inference geometry.
 
-Explicit command-line values override preset values:
+## Latency calibration
 
-```powershell
-python run_bench.py --preset micro-demo --seed 77 --warmup 10 --measured-runs 100 --threads 1 --output report-custom.json
-```
+SparseFlow measures baseline and comparison artifacts in deterministic seeded randomized pairs rather than measuring all baseline runs and then all optimized runs. The complete recipe records warmups, pair count, provider, timer, seed, order policy, input shape, thread counts, and benchmark mode and receives a deterministic SHA-256 hash.
 
-The selected preset and final resolved values are recorded in the report's `configuration` object. There is no ResNet-18 preset because V0 does not support ResNet-18.
+Before a real comparison, the harness loads the identical baseline ONNX artifact into independent ONNX Runtime sessions and measures a null-effect distribution. The MDI is derived from the two-sided empirical percentile interval and stored with its derivation and raw samples.
 
-## Evidence report
+SparseFlow does not report latency improvements below the calibrated minimum detectable improvement. Structural reductions do not automatically imply latency reductions. Latency is noise-sensitive, especially for short local CPU runs.
 
-Schema `0.3.0` adds explicit product positioning, resolved configuration, full latency summary statistics, and latency interpretation. `metrics.latency_ms` retains every sample plus a deterministic sample hash, p50, p95, minimum, maximum, arithmetic mean, population standard deviation, and coefficient of variation. It also records warmup and measured counts, provider, clock, and ONNX Runtime intra-op and inter-op thread counts.
+Environment telemetry is diagnostic only and never adjusts measured latency.
 
-`latency_interpretation.commercial_speedup_claim_supported` is false by policy in V0. A report is marked noise-sensitive when baseline p50 is below `0.1 ms` or either latency distribution has a coefficient of variation above `0.10`.
+## Evidence
 
-Report assembly and validation live in `sparseflow.report`. Missing mandatory evidence raises `EvidenceValidationError`, and no official report is written. See [docs/benchmark-interpretation.md](docs/benchmark-interpretation.md) for interpretation guidance.
+The V0/Gate 1/Gate 1.5 report contract remains `schemas/evidence-report.schema.json`. Gate 2 uses `schemas/evidence-report-gate2.schema.json` and schema version `0.5.0` after the existing measurement evidence has passed its fail-closed validation path.
 
-## NoOp control
+Gate 2 evidence includes:
 
-The NoOp pass verifies that the measurement pipeline does not invent structural changes. Its official evidence must show zero parameter and MAC/FLOP deltas, an empty graph-change list, matching baseline and optimized structural/model hashes, and passing output fidelity. Runtime samples may still vary because separate executions are measured.
+- dependency graph and hash;
+- immutable pruning plan and hash;
+- canonical kept/removed channel indices;
+- residual coupling-group validation;
+- transactional mutation status;
+- executed module dimensions and channel indices;
+- independent plan-versus-execution validation;
+- semantic graph changes and structural hashes;
+- parameter, serialized-size, MAC/FLOP, and fidelity-proxy metrics;
+- ONNX checker and ONNX Runtime CPU validation;
+- measurement recipe, null calibration, MDI, paired samples, and latency interpretation.
 
-## Reference run
+Gate A steps 1–4 emit a separate checkpoint report that records weight provenance plus measured stage/logit equivalence. It intentionally records dataset evaluation as `not_run` until ImageNet-1K validation data is available.
 
-Curated mechanism-demonstration reports are checked in at [examples/reference-run/channel-prune-report.json](examples/reference-run/channel-prune-report.json) and [examples/reference-run/noop-report.json](examples/reference-run/noop-report.json). Their provenance and limitations are documented in [examples/reference-run/README.md](examples/reference-run/README.md).
-
-Ordinary root `report*.json`, ONNX files, and artifact directories are generated outputs and ignored by Git.
+Generated root `report*.json` and ONNX artifacts remain ignored. Curated V0 evidence remains under `examples/reference-run/`.
 
 ## Architecture
 
-- `run_bench.py`: CLI, preset resolution, pass selection, and report orchestration.
-- `sparseflow/models.py`: bundled deterministic reference CNN.
-- `sparseflow/passes.py`: NoOp and supported physical channel-pruning transformations.
-- `sparseflow/benchmark.py`: ONNX export, CPU timing, structural/runtime metrics, fidelity proxy, and hashes.
-- `sparseflow/audit.py`: machine, software, process, repository, and Git metadata.
-- `sparseflow/report.py`: evidence assembly, schema validation, and atomic output.
-- `schemas/evidence-report.schema.json`: official report contract.
-- `scripts/check_release.py`: non-destructive release-readiness checks.
-
-## Current limitations
-
-The pruning pass handles only the bundled model's linear dense dependency pattern. It does not repair residual additions, identity/projection branches, concatenations, grouped or depthwise convolutions, or arbitrary classifiers. Fidelity is a deterministic random-input output proxy, not task accuracy. Latency comes from one local CPU process and is not a production workload result.
-
-## V1 roadmap
-
-SparseFlow V1 targets ResNet-18 on x86 CPU using ONNX Runtime, with dependency-aware physical `Conv2d` channel pruning and evaluation on a real dataset or defensible fixed validation subset. Work is gated on residual dependency analysis, complete branch repair, valid ONNX execution, explicit task accuracy, repeated latency disclosure, and deterministic structural evidence. No latency improvement is promised before measurement.
-
-## Explicitly out of scope
-
-V0 does not implement 2:4 structured sparsity, CUDA or GPU kernels, A100 acceleration, MLIR compilation, quantization, model training, fine-tuning, or online dataset acquisition. Those terms are not part of the current product identity.
+- `run_bench.py` — CLI and evidence orchestration.
+- `sparseflow/models.py` — deterministic reference CNN and local ResNet-18.
+- `sparseflow/pretrained.py` — v0.3 pretrained import, module/config validation, stage hooks, logit equivalence, and weight provenance.
+- `sparseflow/dependencies.py` — ResNet dependency graph and residual constraints.
+- `sparseflow/planning.py` — immutable Gate 2 plans, canonical residual groups, ranking, and pre-mutation validation.
+- `sparseflow/resnet_pruning.py` — transactional physical tensor surgery and executed-plan validation.
+- `sparseflow/gate2_pass.py` — Gate 2 optimization-pass adapter and graph-change evidence.
+- `sparseflow/measurement.py` — paired measurement, telemetry, calibration, and MDI.
+- `sparseflow/benchmark.py` — ONNX export, ORT validation, metrics, and fidelity proxy.
+- `sparseflow/report.py` — existing fail-closed report and measurement validation.
+- `sparseflow/gate2_report.py` — independent Gate 2 plan/coupling/execution evidence boundary.
+- `scripts/check_pretrained_import.py` — v0.3 Gate A steps 1–4 checkpoint runner.
+- `scripts/check_release.py` — release-readiness checks.
 
 ## Testing
 
-The suite covers unit, integration, and CLI behavior with an 80% branch-coverage floor:
+The repository enforces an 80% branch-aware coverage floor:
 
 ```powershell
 python -m pytest -q
 ```
 
-The release checker verifies repository state, package imports, test-command availability, positioning, tracked-report hygiene, schema consistency, curated reports, commit provenance, required disclaimers, current-product claims, and tracked secret indicators:
+Gate 2 tests cover deterministic planning, canonical residual channel identity, same-width/different-index rejection, missing projection rejection, original-model preservation, physical parameter reduction, output execution, classifier repair, pass evidence, and executed-plan mismatch rejection.
 
-```powershell
-python scripts/check_release.py
-```
+Gate A helper tests cover measured error recording, strict shape mismatch rejection, explicit eval-mode preconditions, BatchNorm configuration provenance, ReLU storage-policy treatment, and projection/classifier module-map coverage. CI additionally runs the real official-weight import checkpoint.
 
-Use `--allow-dirty` only for a pre-commit check; the final release check requires a clean tree.
+A pre-push hook may run the full test suite locally. The repository also contains a CI workflow for branch/PR verification.
 
-## Reproducibility
+## Reference-run provenance
 
-For identical code, preset, seed, and pass configuration, compare model hashes, graph-diff hash, resolved configuration, parameter counts, and MAC/FLOP counts. Latency samples are deliberately excluded from deterministic equality because operating-system scheduling, clocks, caches, and runtime behavior vary.
+The curated reference run remains a bundled untrained micro-model evidence mechanism, not a commercial benchmark. Its documentation records machine, software versions, configuration, and commit provenance. Latency is noise-sensitive, and structural reductions do not automatically imply latency reductions.
 
-Each report captures the repository path and identifier, current commit hash, dirty-tree flag, machine and software fingerprint, process/thread settings, complete resolved configuration, graph changes, structural hashes, model hashes, and ONNX hashes. Generated reports should honestly retain `dirty: true` when run from a modified tree.
+## Next milestone
+
+After Gate A steps 1–4 are green, the next work is data logistics only: acquire/pin an ImageNet-1K validation manifest, run the official `weights.transforms()` pipeline, reproduce the 69.758% / 89.078% baseline within a declared tolerance, and only then permit any pretrained pruning/accuracy experiment.

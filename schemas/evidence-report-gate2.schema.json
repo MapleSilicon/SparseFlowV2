@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://maplesilicon.co/schemas/sparseflow/evidence-report-gate2-0.5.0.json",
+  "title": "SparseFlow v0.2 Gate 2 evidence report",
+  "type": "object",
+  "required": ["schema_version", "product", "run", "environment", "model", "configuration", "optimization", "measurement_recipe", "latency_calibration", "environment_drift", "paired_statistics", "metrics", "latency_interpretation", "graph", "artifacts"],
+  "properties": {
+    "schema_version": {"enum": ["0.4.0", "0.5.0"]},
+    "product": {
+      "type": "object",
+      "required": ["current_milestone", "positioning", "demonstration_type", "commercial_benchmark"],
+      "properties": {
+        "current_milestone": {"type": "string", "minLength": 1},
+        "positioning": {"type": "string", "minLength": 1},
+        "demonstration_type": {"type": "string", "minLength": 1},
+        "commercial_benchmark": {"const": false},
+        "development_milestone": {"type": "string", "minLength": 1},
+        "next_milestone": {"type": "string", "minLength": 1}
+      }
+    },
+    "run": {"type": "object", "required": ["id", "timestamp_utc", "seed", "input_shape", "repository", "git"]},
+    "environment": {"type": "object", "required": ["hardware", "software", "process"]},
+    "model": {
+      "type": "object",
+      "required": ["identifier", "architecture_identifier", "fidelity_is_proxy"],
+      "properties": {
+        "identifier": {"const": "resnet18-reference"},
+        "architecture_identifier": {"type": "string", "minLength": 1},
+        "fidelity_is_proxy": {"const": true}
+      }
+    },
+    "configuration": {"type": "object", "required": ["preset", "model_identifier", "seed", "input_shape", "pass_name", "pruning_ratio", "warmup_runs", "measured_runs", "intra_op_threads", "inter_op_threads", "output_report_filename"]},
+    "optimization": {
+      "type": "object",
+      "required": ["pass_name", "config", "metadata"],
+      "properties": {
+        "pass_name": {"const": "channel_prune"},
+        "config": {"type": "object"},
+        "metadata": {
+          "type": "object",
+          "required": ["gate", "dependency_analysis", "dependency_graph_hash", "pruning_plan", "pruning_plan_hash", "coupling_group_validation", "plan_vs_execution_validation", "transaction", "physical_pruning_performed"],
+          "properties": {
+            "gate": {"const": "resnet18_gate2_transactional_physical_pruning"},
+            "dependency_graph_hash": {"$ref": "#/$defs/hash"},
+            "pruning_plan_hash": {"$ref": "#/$defs/hash"},
+            "physical_pruning_performed": {"const": true},
+            "pruning_plan": {
+              "type": "object",
+              "required": ["schema_version", "architecture_identifier", "pruning_ratio", "dependency_graph_hash", "layer_decisions", "residual_coupling_groups", "plan_hash"]
+            },
+            "coupling_group_validation": {
+              "type": "object",
+              "required": ["validated", "all_members_match", "coupling_groups", "plan_hash"],
+              "properties": {"validated": {"const": true}, "all_members_match": {"const": true}}
+            },
+            "plan_vs_execution_validation": {
+              "type": "object",
+              "required": ["validated", "executed_as_planned", "planned_change_count", "executed_change_count", "changes", "execution_hash"],
+              "properties": {"validated": {"const": true}, "executed_as_planned": {"const": true}}
+            },
+            "transaction": {
+              "type": "object",
+              "required": ["validated_before_mutation", "mutated_copy_only", "original_model_preserved", "committed"],
+              "properties": {
+                "validated_before_mutation": {"const": true},
+                "mutated_copy_only": {"const": true},
+                "original_model_preserved": {"const": true},
+                "committed": {"const": true}
+              }
+            }
+          }
+        }
+      }
+    },
+    "measurement_recipe": {"type": "object", "required": ["recipe_hash", "input_shape", "provider", "timer", "pair_repetitions", "warmup_runs"]},
+    "latency_calibration": {"type": "object", "required": ["measurement_recipe_hash", "artifact_identity_verified", "minimum_detectable_improvement_percent", "mdi_derivation", "pairs"]},
+    "environment_drift": {"type": "object", "required": ["diagnostic_only", "used_to_adjust_latency", "calibration", "comparison"]},
+    "paired_statistics": {"type": "object", "required": ["measurement_recipe_hash", "pairs", "paired_improvement_percent"]},
+    "metrics": {
+      "type": "object",
+      "required": ["parameters", "serialized_size_bytes", "latency_ms", "compute", "fidelity"],
+      "properties": {
+        "parameters": {"$ref": "#/$defs/comparison"},
+        "serialized_size_bytes": {"type": "object", "required": ["pytorch_state_dict", "onnx"]},
+        "latency_ms": {"type": "object", "required": ["methodology", "baseline", "optimized"]},
+        "compute": {"type": "object", "required": ["input_shape", "baseline", "optimized", "mac_reduction_percent", "flop_reduction_percent"]},
+        "fidelity": {"type": "object", "required": ["label", "method", "absolute_error_max", "relative_l2_error", "passed"]}
+      }
+    },
+    "latency_interpretation": {"type": "object", "required": ["noise_sensitive", "reasons", "commercial_speedup_claim_supported"], "properties": {"commercial_speedup_claim_supported": {"const": false}}},
+    "graph": {"type": "object", "required": ["changes", "graph_diff_hash", "baseline_structural_hash", "optimized_structural_hash"]},
+    "artifacts": {
+      "type": "object",
+      "required": ["baseline", "optimized"],
+      "properties": {
+        "baseline": {"$ref": "#/$defs/artifact"},
+        "optimized": {"$ref": "#/$defs/artifact"}
+      }
+    }
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "comparison": {"type": "object", "required": ["baseline", "optimized", "reduction_percent"]},
+    "artifact": {
+      "type": "object",
+      "required": ["model_hash", "pytorch_sha256", "onnx_sha256", "onnx_validated", "pytorch_onnx_validation"],
+      "properties": {
+        "model_hash": {"$ref": "#/$defs/hash"},
+        "pytorch_sha256": {"$ref": "#/$defs/hash"},
+        "onnx_sha256": {"$ref": "#/$defs/hash"},
+        "onnx_validated": {"const": true},
+        "pytorch_onnx_validation": {"type": "object", "required": ["passed"], "properties": {"passed": {"const": true}}}
+      }
+    }
+  }
+}

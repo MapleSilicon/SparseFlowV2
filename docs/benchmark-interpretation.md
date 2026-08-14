@@ -16,19 +16,21 @@ SparseFlow V0 records structural and runtime evidence separately. A change in on
 
 ## Runtime metrics
 
-The harness exports baseline and optimized ONNX artifacts and measures them with ONNX Runtime `CPUExecutionProvider`. It records warmup runs, measured runs, intra-op and inter-op thread settings, every latency sample and its hash, p50, p95, minimum, maximum, arithmetic mean, population standard deviation, and coefficient of variation.
+The harness exports baseline and optimized ONNX artifacts and measures them with ONNX Runtime `CPUExecutionProvider`. A deterministic seeded policy randomizes baseline-comparison order within each pair. The report records the recipe hash, warmup runs, pair repetitions, runs per side, execution order, intra-op and inter-op thread settings, every latency sample and its hash, paired differences, paired improvement percentages, p50, p95, minimum, maximum, arithmetic mean, population standard deviation, and coefficient of variation.
 
 p50 describes the median observed execution. p95 exposes the slower tail. Neither is replaced by the arithmetic mean. Warmup runs execute before collection so initial setup is less likely to dominate measured samples, but warmup does not eliminate all variability.
 
 Microbenchmark noise can come from operating-system scheduling, process contention, clock resolution, power management, caches, allocator state, operator dispatch, thread-pool behavior, tensor dimensions, and ONNX Runtime kernel selection. Smaller models may run slower despite using fewer parameters or MACs because fixed overhead and kernel efficiency can dominate useful compute.
 
-V0 flags latency as noise-sensitive when baseline p50 is below `0.1 ms` or when baseline or optimized coefficient of variation exceeds `0.10`. This deterministic rule is a warning, not a claim that an unflagged run is production-representative.
+Gate 1.5 also loads the baseline ONNX artifact into two independent sessions and measures an identical-artifact null distribution. Model, PyTorch, ONNX, and structural graph hashes must match before calibration is allowed. A two-sided empirical percentile interval is computed from paired null improvements, and the maximum absolute bound becomes the minimum detectable improvement (MDI). The derivation and raw null samples are evidence, not a hardcoded threshold.
+
+SparseFlow does not report latency improvements below the calibrated minimum detectable improvement. It also flags latency as noise-sensitive when baseline p50 is below `0.1 ms`, when baseline or optimized coefficient of variation exceeds `0.10`, or when the observed paired median improvement does not exceed the calibrated MDI. These deterministic rules do not make an unflagged run production-representative.
 
 ## Interpreting reductions
 
 Parameter reduction is not equivalent to compute reduction. MAC reduction is not equivalent to latency reduction. Structural reductions do not automatically imply latency reductions.
 
-The NoOp control validates structural neutrality: parameter counts, compute counts, graph changes, and structural/model hashes remain neutral. Its baseline and optimized latency can still vary slightly because they are separate timing samples.
+The NoOp control validates structural neutrality: parameter counts, compute counts, graph changes, and structural/model hashes remain neutral. Its baseline and optimized latency can still vary slightly because independently loaded sessions are measured in randomized pairs.
 
 Latency claims require larger realistic workloads, repeated controlled runs, stable machine configuration, explicit thread settings, and disclosure of both improvements and regressions. A single tiny-model result cannot support production throughput or cost claims.
 

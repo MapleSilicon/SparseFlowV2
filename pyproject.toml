@@ -4,14 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sparseflow"
-version = "0.1.0"
-description = "SparseFlow V0 reproducible optimization and evidence harness, validated with a deterministic physical channel-pruning demonstration"
+version = "0.2.0"
+description = "SparseFlow v0.2 reproducible model optimization and evidence workflow with transactional ResNet-18 channel pruning"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Maple Silicon Inc." }]
 dependencies = [
   "torch>=2.2,<3.0",
+  "torchvision>=0.17,<1.0",
   "numpy>=1.24,<3.0",
   "onnx>=1.15,<2.0",
   "onnxruntime>=1.17,<2.0",
