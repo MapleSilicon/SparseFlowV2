@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SparseFlow evidence harness with V1 Gate 1.5 latency calibration."""
+"""SparseFlow evidence harness with ResNet-18 Gate 2 transactional pruning."""
 
 from __future__ import annotations
 
@@ -10,13 +10,10 @@ import sys
 from sparseflow.audit import collect_audit_metadata
 from sparseflow.benchmark import run_benchmark
 from sparseflow.config import BenchmarkConfig
+from sparseflow.gate2_pass import ResNet18Gate2PruningPass
 from sparseflow.models import build_model
 from sparseflow.passes import ChannelPruningPass, NoOpPass, OptimizationPass
-from sparseflow.presets import (
-    ResolvedRunConfiguration,
-    get_preset,
-    preset_names,
-)
+from sparseflow.presets import ResolvedRunConfiguration, get_preset, preset_names
 from sparseflow.report import (
     EvidenceValidationError,
     build_evidence_report,
@@ -28,28 +25,18 @@ from sparseflow.report import (
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "SparseFlow evidence harness with ResNet-18 V1 Gate 1 dependency "
-            "analysis and Gate 1.5 calibrated paired CPU latency measurement."
+            "SparseFlow evidence harness with ResNet-18 dependency analysis, "
+            "calibrated latency measurement, and transactional Gate 2 pruning."
         )
     )
     parser.add_argument("--preset", choices=preset_names(), default=None)
     parser.add_argument(
-        "--model",
-        choices=["reference_cnn_v1", "resnet18-reference"],
-        default=None,
+        "--model", choices=["reference_cnn_v1", "resnet18-reference"], default=None
     )
     parser.add_argument(
-        "--pass",
-        dest="pass_name",
-        choices=["noop", "channel-prune"],
-        default=None,
+        "--pass", dest="pass_name", choices=["noop", "channel-prune"], default=None
     )
-    parser.add_argument(
-        "--pruning-ratio",
-        "--prune-ratio",
-        type=float,
-        default=None,
-    )
+    parser.add_argument("--pruning-ratio", "--prune-ratio", type=float, default=None)
     parser.add_argument("--warmup", type=int, default=None)
     parser.add_argument("--measured-runs", "--iters", type=int, default=None)
     parser.add_argument("--threads", type=int, default=None)
@@ -58,9 +45,13 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _optimization_pass(name: str, ratio: float) -> OptimizationPass:
+def _optimization_pass(
+    name: str, ratio: float, *, model_identifier: str = "reference_cnn_v1", seed: int = 1234
+) -> OptimizationPass:
     if name == "noop":
         return NoOpPass()
+    if model_identifier == "resnet18-reference" and ratio > 0.0:
+        return ResNet18Gate2PruningPass(ratio=ratio, seed=seed)
     return ChannelPruningPass(ratio=ratio)
 
 
@@ -85,14 +76,12 @@ def resolve_cli_configuration(argv: list[str] | None = None) -> ResolvedRunConfi
         input_shape=preset.input_shape,
         pass_name=pass_name,
         pruning_ratio=pruning_ratio,
-        warmup_runs=(args.warmup if args.warmup is not None else preset.warmup_runs),
+        warmup_runs=args.warmup if args.warmup is not None else preset.warmup_runs,
         measured_runs=(
             args.measured_runs if args.measured_runs is not None else preset.measured_runs
         ),
         threads=args.threads if args.threads is not None else 1,
-        output_path=(
-            args.output if args.output is not None else Path(preset.output_report_filename)
-        ),
+        output_path=args.output if args.output is not None else Path(preset.output_report_filename),
     )
 
 
@@ -109,11 +98,14 @@ def main(argv: list[str] | None = None) -> int:
             output_report_filename=resolved.output_path.name,
         )
         model = build_model(resolved.model_identifier, seed=resolved.seed)
-        optimization_pass = _optimization_pass(resolved.pass_name, resolved.pruning_ratio)
-        result = run_benchmark(model, optimization_pass, config)
-        audit = collect_audit_metadata(
-            Path.cwd(), seed=resolved.seed, threads=resolved.threads
+        optimization_pass = _optimization_pass(
+            resolved.pass_name,
+            resolved.pruning_ratio,
+            model_identifier=resolved.model_identifier,
+            seed=resolved.seed,
         )
+        result = run_benchmark(model, optimization_pass, config)
+        audit = collect_audit_metadata(Path.cwd(), seed=resolved.seed, threads=resolved.threads)
         report = build_evidence_report(result, audit)
         write_evidence_report(report, resolved.output_path)
     except (EvidenceValidationError, ValueError, RuntimeError, OSError) as exc:
