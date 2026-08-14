@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://maplesilicon.example/sparseflow/pretrained-import.schema.json",
+  "title": "SparseFlow v0.3 Gate A pretrained import evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "gate", "weights", "import_validation", "dataset_evaluation", "gate_passed"],
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "gate": {"const": "v0.3_gate_a_steps_1_4"},
+    "weights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "torchvision_version", "weights_enum", "weights_url", "checkpoint_filename",
+        "checkpoint_sha256", "state_dict_sha256", "expected_imagenet_top1_percent",
+        "expected_imagenet_top5_percent"
+      ],
+      "properties": {
+        "torchvision_version": {"type": "string", "minLength": 1},
+        "weights_enum": {"const": "ResNet18_Weights.IMAGENET1K_V1"},
+        "weights_url": {"type": "string", "minLength": 1},
+        "checkpoint_filename": {"type": "string", "minLength": 1},
+        "checkpoint_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "state_dict_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "expected_imagenet_top1_percent": {"const": 69.758},
+        "expected_imagenet_top5_percent": {"const": 89.078}
+      }
+    },
+    "import_validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state_dict_keys_match", "state_dict_shapes_match", "strict_load_passed",
+        "semantic_module_configuration_match", "all_modules_eval", "fixed_input",
+        "tolerance_atol", "tolerance_rtol", "per_stage", "final_logits",
+        "first_divergent_stage", "logit_equivalence"
+      ],
+      "properties": {
+        "state_dict_keys_match": {"const": true},
+        "state_dict_shapes_match": {"const": true},
+        "strict_load_passed": {"const": true},
+        "semantic_module_configuration_match": {"const": true},
+        "all_modules_eval": {"const": true},
+        "fixed_input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["seed", "shape", "dtype"],
+          "properties": {
+            "seed": {"type": "integer"},
+            "shape": {
+              "type": "array",
+              "prefixItems": [
+                {"type": "integer", "minimum": 1},
+                {"const": 3}, {"const": 224}, {"const": 224}
+              ],
+              "minItems": 4,
+              "maxItems": 4
+            },
+            "dtype": {"const": "float32"}
+          }
+        },
+        "tolerance_atol": {"type": "number", "exclusiveMinimum": 0},
+        "tolerance_rtol": {"type": "number", "exclusiveMinimum": 0},
+        "per_stage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maxpool", "layer1", "layer2", "layer3", "layer4"],
+          "properties": {
+            "maxpool": {"$ref": "#/$defs/comparison"},
+            "layer1": {"$ref": "#/$defs/comparison"},
+            "layer2": {"$ref": "#/$defs/comparison"},
+            "layer3": {"$ref": "#/$defs/comparison"},
+            "layer4": {"$ref": "#/$defs/comparison"}
+          }
+        },
+        "final_logits": {"$ref": "#/$defs/comparison"},
+        "first_divergent_stage": {"type": "null"},
+        "logit_equivalence": {"const": true}
+      }
+    },
+    "dataset_evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "baseline_reproduction_passed"],
+      "properties": {
+        "status": {"const": "not_run"},
+        "reason": {"type": "string", "minLength": 1},
+        "baseline_reproduction_passed": {"type": "null"}
+      }
+    },
+    "gate_passed": {"const": true}
+  },
+  "$defs": {
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_abs_error", "max_rel_error", "argmax_agreement", "close"],
+      "properties": {
+        "max_abs_error": {"type": "number", "minimum": 0},
+        "max_rel_error": {"type": "number", "minimum": 0},
+        "argmax_agreement": {"type": "boolean"},
+        "close": {"const": true}
+      }
+    }
+  }
+}
