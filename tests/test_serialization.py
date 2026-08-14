@@ -31,7 +31,7 @@ def test_json_conversion_supports_declared_portable_types():
 
     assert to_jsonable(value) == {
         "dataclass": {"name": "conv", "dimensions": [1, 2]},
-        "path": str(Path("artifacts/model.onnx")),
+        "path": str(Path("artifacts/model.onnx"),),
         "array": [1, 2],
         "scalar": 1.5,
     }
@@ -77,6 +77,19 @@ def test_atomic_write_creates_complete_final_file_and_file_hash(tmp_path):
     assert json.loads(destination.read_text(encoding="utf-8")) == value
     assert sha256_file(destination) == hashlib.sha256(destination.read_bytes()).hexdigest()
     assert list(destination.parent.glob(f".{destination.name}.*.tmp")) == []
+
+
+def test_atomic_write_argument_order_is_value_then_path(tmp_path):
+    destination = tmp_path / "report.json"
+    value = {"contract": "value-first"}
+
+    atomic_write_json(value, destination)
+    assert json.loads(destination.read_text(encoding="utf-8")) == value
+
+    with pytest.raises(TypeError):
+        atomic_write_json(destination, value)
+
+    assert json.loads(destination.read_text(encoding="utf-8")) == value
 
 
 def test_atomic_write_serialization_failure_preserves_destination_and_cleans_temp(tmp_path):
