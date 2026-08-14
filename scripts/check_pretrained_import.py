@@ -1,4 +1,4 @@
-"""Run SparseFlow v0.3 Gate A steps 1-4 and emit auditable JSON evidence."""
+"""Run SparseFlow v0.3 Gate A steps 1-4 and emit schema-validated evidence."""
 
 from __future__ import annotations
 
@@ -6,8 +6,23 @@ import argparse
 import json
 from pathlib import Path
 
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError, ValidationError
+
 from sparseflow.pretrained import load_and_validate_pretrained_resnet18
 from sparseflow.serialization import atomic_write_json
+
+
+SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "pretrained-import.schema.json"
+
+
+def validate_pretrained_import_evidence(evidence: dict) -> None:
+    try:
+        schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+        Draft202012Validator.check_schema(schema)
+        Draft202012Validator(schema).validate(evidence)
+    except (OSError, json.JSONDecodeError, SchemaError, ValidationError) as exc:
+        raise RuntimeError(f"pretrained import evidence validation failed: {exc}") from exc
 
 
 def main() -> int:
@@ -26,6 +41,8 @@ def main() -> int:
         rtol=args.rtol,
         progress=False,
     )
+    validate_pretrained_import_evidence(evidence)
+
     output = Path(args.output)
     atomic_write_json(output, evidence)
 
