@@ -29,3 +29,7 @@ jobs:
         run: python -m pytest -q
       - name: Gate 2 smoke benchmark
         run: python run_bench.py --preset resnet18-gate2 --output report-resnet18-gate2-ci.json
+      - name: Release readiness
+        run: python scripts/check_release.py --allow-dirty
+      - name: Dependency consistency
+        run: python -m pip check
