@@ -11,6 +11,7 @@ from sparseflow.audit import collect_audit_metadata
 from sparseflow.benchmark import run_benchmark
 from sparseflow.config import BenchmarkConfig
 from sparseflow.gate2_pass import ResNet18Gate2PruningPass
+from sparseflow.gate2_report import GATE2_SCHEMA_PATH, build_gate2_evidence_report
 from sparseflow.models import build_model
 from sparseflow.passes import ChannelPruningPass, NoOpPass, OptimizationPass
 from sparseflow.presets import ResolvedRunConfiguration, get_preset, preset_names
@@ -106,8 +107,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         result = run_benchmark(model, optimization_pass, config)
         audit = collect_audit_metadata(Path.cwd(), seed=resolved.seed, threads=resolved.threads)
-        report = build_evidence_report(result, audit)
-        write_evidence_report(report, resolved.output_path)
+        is_gate2 = result.optimization["metadata"].get("gate") == (
+            "resnet18_gate2_transactional_physical_pruning"
+        )
+        if is_gate2:
+            report = build_gate2_evidence_report(result, audit)
+            write_evidence_report(report, resolved.output_path, schema_path=GATE2_SCHEMA_PATH)
+        else:
+            report = build_evidence_report(result, audit)
+            write_evidence_report(report, resolved.output_path)
     except (EvidenceValidationError, ValueError, RuntimeError, OSError) as exc:
         print(f"SparseFlow benchmark failed: {exc}", file=sys.stderr)
         return 2
