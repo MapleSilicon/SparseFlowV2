@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sparseflow"
-version = "0.1.0"
-description = "SparseFlow V0 reproducible optimization and evidence harness, validated with a deterministic physical channel-pruning demonstration"
+version = "0.2.0"
+description = "SparseFlow v0.2 reproducible model optimization and evidence workflow with transactional ResNet-18 channel pruning"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
