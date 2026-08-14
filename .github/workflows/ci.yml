@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,11 +24,13 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -e .
       - name: Compile
-        run: python -m compileall -q sparseflow run_bench.py
+        run: python -m compileall -q sparseflow scripts run_bench.py
       - name: Test
         run: python -m pytest -q
       - name: Gate 2 smoke benchmark
         run: python run_bench.py --preset resnet18-gate2 --output report-resnet18-gate2-ci.json
+      - name: v0.3 Gate A pretrained import checkpoint
+        run: python scripts/check_pretrained_import.py --output report-pretrained-import-ci.json
       - name: Release readiness
         run: python scripts/check_release.py --allow-dirty
       - name: Dependency consistency
