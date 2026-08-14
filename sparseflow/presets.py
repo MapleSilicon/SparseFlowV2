@@ -1,4 +1,4 @@
-"""Structured benchmark presets for SparseFlow V0 and V1 Gate 1 evidence."""
+"""Structured benchmark presets for SparseFlow V0 and V1 evidence gates."""
 
 from __future__ import annotations
 
@@ -72,6 +72,17 @@ _PRESETS = {
         warmup_runs=1,
         measured_runs=3,
         output_report_filename="report-resnet18-gate1.json",
+    ),
+    "resnet18-gate2": BenchmarkPreset(
+        name="resnet18-gate2",
+        model_identifier="resnet18-reference",
+        seed=1234,
+        input_shape=(1, 3, 64, 64),
+        pass_name="channel-prune",
+        pruning_ratio=0.125,
+        warmup_runs=2,
+        measured_runs=5,
+        output_report_filename="report-resnet18-gate2.json",
     ),
 }
 
