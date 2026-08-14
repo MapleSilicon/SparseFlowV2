@@ -44,7 +44,7 @@ def main() -> int:
     validate_pretrained_import_evidence(evidence)
 
     output = Path(args.output)
-    atomic_write_json(output, evidence)
+    atomic_write_json(evidence, output)
 
     final_logits = evidence["import_validation"]["final_logits"]
     print("SparseFlow v0.3 Gate A — pretrained import checkpoint")
