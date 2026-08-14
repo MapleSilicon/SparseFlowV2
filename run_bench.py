@@ -87,6 +87,7 @@ def resolve_cli_configuration(argv: list[str] | None = None) -> ResolvedRunConfi
 
 
 def main(argv: list[str] | None = None) -> int:
+    is_gate2 = False
     try:
         resolved = resolve_cli_configuration(argv)
         config = BenchmarkConfig(
@@ -120,7 +121,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"SparseFlow benchmark failed: {exc}", file=sys.stderr)
         return 2
 
-    print(render_result_table(report))
+    rendered = render_result_table(report)
+    if is_gate2:
+        rendered = rendered.replace(
+            "SparseFlow V1 Gate 1 Evidence Benchmark",
+            "SparseFlow v0.2 Gate 2 Evidence Benchmark",
+            1,
+        )
+    print(rendered)
     print(f"\nReport: {resolved.output_path.resolve()}")
     return 0
 
