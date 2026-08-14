@@ -12,6 +12,7 @@ license = { text = "MIT" }
 authors = [{ name = "Maple Silicon Inc." }]
 dependencies = [
   "torch>=2.2,<3.0",
+  "torchvision>=0.17,<1.0",
   "numpy>=1.24,<3.0",
   "onnx>=1.15,<2.0",
   "onnxruntime>=1.17,<2.0",
