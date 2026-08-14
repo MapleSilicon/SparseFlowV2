@@ -14,7 +14,7 @@ from sparseflow.models import build_resnet18_reference
 
 def test_tensor_comparison_records_measured_errors_and_argmax():
     reference = torch.tensor([[1.0, 2.0, 3.0]], dtype=torch.float32)
-    candidate = reference + torch.tensor([[0.0, 1.0e-7, -1.0e-7]], dtype=torch.float32)
+    candidate = reference + torch.tensor([[0.0, 5.0e-7, -5.0e-7]], dtype=torch.float32)
     result = _compare_tensors(reference, candidate, atol=1.0e-6, rtol=1.0e-5)
     assert result.close is True
     assert result.argmax_agreement is True
